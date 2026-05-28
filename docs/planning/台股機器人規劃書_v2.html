@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>企業級全自動台股 AI 投資預警系統 — 規劃書 v2.0</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --primary: #1e3a5f;
+    --primary-light: #2c5282;
+    --accent: #ff6b35;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --info: #3b82f6;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+    --stage-1: #6366f1;
+    --stage-2: #8b5cf6;
+    --stage-3: #ec4899;
+    --stage-4: #14b8a6;
+    --stage-5: #f59e0b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC",
+                 "Microsoft JhengHei", "Helvetica Neue", sans-serif;
+    line-height: 1.7;
+    color: var(--gray-900);
+    background: var(--gray-50);
+    font-size: 16px;
+  }
+
+  /* ===== Header ===== */
+  header.hero {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+    color: white;
+    padding: 60px 40px 80px;
+    position: relative;
+    overflow: hidden;
+  }
+  header.hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -10%;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(255,107,53,0.15) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .hero-content { max-width: 1200px; margin: 0 auto; position: relative; z-index: 1; }
+  .hero-badges { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+  .badge {
+    display: inline-block;
+    padding: 4px 12px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    backdrop-filter: blur(10px);
+  }
+  .badge.accent { background: var(--accent); }
+  h1.hero-title {
+    font-size: 42px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
+  }
+  .hero-subtitle {
+    font-size: 18px;
+    opacity: 0.9;
+    margin-bottom: 30px;
+  }
+  .hero-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-top: 30px;
+  }
+  .meta-item {
+    background: rgba(255,255,255,0.1);
+    padding: 16px 20px;
+    border-radius: 8px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .meta-label { font-size: 12px; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px; }
+  .meta-value { font-size: 18px; font-weight: 600; margin-top: 4px; }
+
+  /* ===== Main Layout ===== */
+  main {
+    max-width: 1200px;
+    margin: -40px auto 0;
+    padding: 0 40px 80px;
+    position: relative;
+    z-index: 2;
+  }
+
+  /* ===== Section ===== */
+  section {
+    background: white;
+    border-radius: 12px;
+    padding: 40px;
+    margin-bottom: 32px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.04);
+  }
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--gray-100);
+  }
+  .section-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--primary);
+    color: white;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .section-title h2 {
+    font-size: 26px;
+    color: var(--primary);
+    font-weight: 700;
+  }
+  .section-subtitle {
+    color: var(--gray-500);
+    font-size: 15px;
+    margin-top: -16px;
+    margin-bottom: 24px;
+  }
+
+  /* ===== Exec Summary ===== */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 24px;
+    margin-top: 16px;
+  }
+  .summary-text { line-height: 1.8; }
+  .summary-text p { margin-bottom: 12px; }
+  .summary-text strong { color: var(--primary); }
+  .summary-stats {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+    border-radius: 12px;
+    padding: 24px;
+    color: white;
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { font-size: 13px; opacity: 0.85; }
+  .stat-value { font-size: 22px; font-weight: 700; color: #fcd34d; }
+
+  /* ===== Changes Box ===== */
+  .changes-box {
+    background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin: 20px 0;
+  }
+  .changes-box h4 {
+    color: #92400e;
+    margin-bottom: 12px;
+    font-size: 16px;
+  }
+  .changes-box ul { list-style: none; }
+  .changes-box li {
+    padding: 6px 0;
+    color: #78350f;
+    position: relative;
+    padding-left: 24px;
+  }
+  .changes-box li::before {
+    content: '✓';
+    position: absolute;
+    left: 0;
+    color: var(--success);
+    font-weight: 700;
+  }
+
+  /* ===== Mermaid Container ===== */
+  .mermaid-container {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 24px;
+    margin: 20px 0;
+    overflow-x: auto;
+  }
+  .mermaid { text-align: center; }
+  .diagram-caption {
+    text-align: center;
+    color: var(--gray-500);
+    font-size: 13px;
+    margin-top: 12px;
+    font-style: italic;
+  }
+
+  /* ===== Stage Cards ===== */
+  .stage-card {
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    margin-bottom: 24px;
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+  }
+  .stage-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+  .stage-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 24px;
+    color: white;
+    font-weight: 600;
+  }
+  .stage-1 .stage-header { background: linear-gradient(135deg, #6366f1, #4f46e5); }
+  .stage-2 .stage-header { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+  .stage-3 .stage-header { background: linear-gradient(135deg, #ec4899, #db2777); }
+  .stage-4 .stage-header { background: linear-gradient(135deg, #14b8a6, #0d9488); }
+  .stage-5 .stage-header { background: linear-gradient(135deg, #f59e0b, #d97706); }
+
+  .stage-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .stage-title { flex: 1; }
+  .stage-title h3 { font-size: 20px; margin-bottom: 4px; }
+  .stage-title .stage-goal { font-size: 13px; opacity: 0.9; font-weight: 400; }
+  .stage-body { padding: 28px; }
+
+  .work-item {
+    background: var(--gray-50);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    border-left: 3px solid var(--gray-300);
+  }
+  .work-item.priority-high { border-left-color: var(--danger); background: #fef2f2; }
+  .work-item.priority-new { border-left-color: var(--success); background: #f0fdf4; }
+  .work-item-title {
+    font-weight: 600;
+    color: var(--gray-900);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .work-item-title .tag {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .tag.new { background: var(--success); color: white; }
+  .tag.fix { background: var(--danger); color: white; }
+  .tag.improve { background: var(--info); color: white; }
+  .work-item p { color: var(--gray-700); font-size: 14px; line-height: 1.6; }
+  .work-item code {
+    background: white;
+    border: 1px solid var(--gray-200);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--accent);
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+  }
+
+  /* ===== Tables ===== */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    background: white;
+    font-size: 14px;
+  }
+  th {
+    background: var(--primary);
+    color: white;
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--gray-200);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover { background: var(--gray-50); }
+  td code {
+    background: var(--gray-100);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--accent);
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+  }
+  .check { color: var(--success); font-weight: 700; }
+  .cross { color: var(--danger); font-weight: 700; }
+
+  /* ===== Schema Card ===== */
+  .schema-card {
+    background: #1e293b;
+    color: #e2e8f0;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 16px 0;
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    overflow-x: auto;
+  }
+  .schema-card .keyword { color: #f472b6; }
+  .schema-card .type { color: #60a5fa; }
+  .schema-card .string { color: #86efac; }
+  .schema-card .comment { color: #64748b; font-style: italic; }
+
+  /* ===== Roadmap ===== */
+  .roadmap-wave {
+    border: 2px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    position: relative;
+  }
+  .roadmap-wave.wave-1 { border-color: #ffd700; background: linear-gradient(to right, #fffbeb, white 30%); }
+  .roadmap-wave.wave-2 { border-color: #c0c0c0; background: linear-gradient(to right, #f9fafb, white 30%); }
+  .roadmap-wave.wave-3 { border-color: #cd7f32; background: linear-gradient(to right, #fef3c7, white 30%); }
+  .wave-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .wave-medal { font-size: 32px; }
+  .wave-title { font-size: 20px; font-weight: 700; color: var(--gray-900); }
+  .wave-timeframe {
+    margin-left: auto;
+    background: var(--gray-100);
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    color: var(--gray-700);
+  }
+  .roadmap-item {
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 10px;
+  }
+  .roadmap-item h5 {
+    color: var(--primary);
+    font-size: 15px;
+    margin-bottom: 6px;
+  }
+  .roadmap-item p { font-size: 14px; color: var(--gray-700); }
+
+  /* ===== Positioning Cards ===== */
+  .positioning-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 20px;
+    margin: 20px 0;
+  }
+  .pos-card {
+    border: 2px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 24px;
+    background: white;
+  }
+  .pos-card.csa { border-top: 4px solid var(--info); }
+  .pos-card.de { border-top: 4px solid var(--success); }
+  .pos-card.sg { border-top: 4px solid var(--accent); }
+  .pos-card h4 {
+    font-size: 18px;
+    margin-bottom: 8px;
+    color: var(--primary);
+  }
+  .pos-tagline {
+    font-size: 13px;
+    color: var(--gray-500);
+    margin-bottom: 16px;
+    font-style: italic;
+  }
+  .pos-card table th { font-size: 11px; padding: 8px 12px; }
+  .pos-card table td { padding: 10px 12px; font-size: 13px; }
+  .interview-quote {
+    background: linear-gradient(135deg, #eff6ff, #dbeafe);
+    border-left: 4px solid var(--info);
+    padding: 16px 20px;
+    border-radius: 8px;
+    margin-top: 16px;
+    font-style: italic;
+    color: #1e40af;
+    font-size: 14px;
+  }
+  .interview-quote::before {
+    content: '“';
+    font-size: 32px;
+    line-height: 0;
+    vertical-align: -10px;
+    color: var(--info);
+    margin-right: 4px;
+  }
+
+  /* ===== TOC ===== */
+  .toc {
+    background: white;
+    border-radius: 12px;
+    padding: 24px 32px;
+    margin-bottom: 32px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .toc h3 { color: var(--primary); margin-bottom: 16px; font-size: 16px; }
+  .toc-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+    list-style: none;
+  }
+  .toc-list a {
+    display: block;
+    padding: 8px 12px;
+    color: var(--gray-700);
+    text-decoration: none;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: all 0.15s;
+  }
+  .toc-list a:hover {
+    background: var(--gray-100);
+    color: var(--primary);
+    transform: translateX(4px);
+  }
+
+  /* ===== Action Box ===== */
+  .action-box {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin: 20px 0;
+  }
+  .action-box h3 { font-size: 20px; margin-bottom: 16px; }
+  .action-list { list-style: none; }
+  .action-list li {
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .action-list li:last-child { border-bottom: none; }
+  .action-num {
+    background: white;
+    color: var(--success);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  /* ===== Footer ===== */
+  footer {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--gray-500);
+    font-size: 13px;
+  }
+
+  @media (max-width: 768px) {
+    header.hero { padding: 40px 20px 60px; }
+    h1.hero-title { font-size: 28px; }
+    main { padding: 0 20px 40px; }
+    section { padding: 24px; }
+    .summary-grid { grid-template-columns: 1fr; }
+  }
+
+  @media print {
+    body { background: white; }
+    header.hero { background: var(--primary); }
+    section { box-shadow: none; border: 1px solid var(--gray-200); page-break-inside: avoid; }
+    .stage-card { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-content">
+    <div class="hero-badges">
+      <span class="badge accent">v2.0 RELEASE</span>
+      <span class="badge">企業級架構</span>
+      <span class="badge">AWS Serverless</span>
+      <span class="badge">LLM Grounding</span>
+      <span class="badge">合約導向設計</span>
+    </div>
+    <h1 class="hero-title">企業級全自動台股 AI 投資預警系統</h1>
+    <p class="hero-subtitle">
+      專為 <strong>雲端架構師 (CSA)</strong> 與 <strong>資深資料工程師 (Sr DE)</strong> 求職面試設計的 Side Project 規劃書
+    </p>
+    <div class="hero-meta">
+      <div class="meta-item">
+        <div class="meta-label">技術核心</div>
+        <div class="meta-value">AWS Serverless</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">AI 引擎</div>
+        <div class="meta-value">Bedrock Claude 4.5</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">部署模式</div>
+        <div class="meta-value">Terraform IaC</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">文件版本</div>
+        <div class="meta-value">2026-05-24</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- TOC -->
+<div class="toc">
+  <h3>📑 目錄導覽</h3>
+  <ul class="toc-list">
+    <li><a href="#exec-summary">① 執行摘要與 v1→v2 差異</a></li>
+    <li><a href="#architecture">② 整體架構藍圖</a></li>
+    <li><a href="#stages">③ 五階段工作細節</a></li>
+    <li><a href="#schemas">④ 階段間 Schema 契約</a></li>
+    <li><a href="#cost">⑤ Bedrock 模型成本分析</a></li>
+    <li><a href="#roadmap">⑥ 未來精進三波路線圖</a></li>
+    <li><a href="#positioning">⑦ 求職定位策略</a></li>
+    <li><a href="#action">⑧ 立即可執行的下一步</a></li>
+  </ul>
+</div>
+
+<!-- ===== Executive Summary ===== -->
+<section id="exec-summary">
+  <div class="section-title">
+    <span class="section-num">01</span>
+    <h2>執行摘要</h2>
+  </div>
+
+  <div class="summary-grid">
+    <div class="summary-text">
+      <p>
+        本系統以 <strong>AWS Serverless</strong> 為核心，建構一個從資料採集、ETL、AI 分析到 LINE 推播的全自動台股投資預警平台。系統採用 <strong>EventBridge → SQS → Lambda fan-out</strong> 架構，確保大量股票分析任務可水平擴展且具備容錯能力。
+      </p>
+      <p>
+        AI 層使用 <strong>Amazon Bedrock + Claude 4.5 Haiku</strong>，搭配 <strong>LLM Grounding</strong> 與 <strong>Output Validation</strong> 雙重防護，避免幻覺並確保推播內容品質。整體部署透過 <strong>Terraform + GitHub Actions</strong> 完全自動化，符合企業級 IaC 與 CI/CD 標準。
+      </p>
+      <p>
+        相較於 v1，<strong>v2 補上 SQS 解耦、DLQ 容錯、Secrets Manager、API Gateway Webhook 與 Schema 契約表</strong>，使整份規劃從「個人實作」進化為「企業級交付物」。
+      </p>
+    </div>
+
+    <div class="summary-stats">
+      <div class="stat-row">
+        <span class="stat-label">階段數量</span>
+        <span class="stat-value">5</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">AWS 服務數</span>
+        <span class="stat-value">12+</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">預估月成本</span>
+        <span class="stat-value">$8-15</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">每日處理股票</span>
+        <span class="stat-value">~1000</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">分析延遲</span>
+        <span class="stat-value">&lt; 15min</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="changes-box">
+    <h4>🆕 v2 版本相對於 v1 的關鍵升級</h4>
+    <ul>
+      <li><strong>補回 SQS + DLQ</strong>：實現 fan-out 並發處理與失敗訊息隔離</li>
+      <li><strong>升級 LLM 模型</strong>：Claude 3 Haiku → Claude 4.5 Haiku（最新可用版本）</li>
+      <li><strong>資料源策略</strong>：主源改用 TWSE OpenAPI，yfinance 降為備援</li>
+      <li><strong>新增 Secrets Manager</strong>：所有 API Key 走密鑰管理服務，杜絕環境變數明文</li>
+      <li><strong>LINE Bot 補完 API Gateway Webhook 流程</strong>，加入 HMAC 簽章驗證</li>
+      <li><strong>DynamoDB 加 GSI</strong>：支援跨股票查詢，Sparse Index 控制成本</li>
+      <li><strong>新增 Schema 契約表</strong>：階段間輸入/輸出 Schema 明確定義</li>
+      <li><strong>觸發時間調整</strong>：15:00 → 15:30（避開 TWSE 資料尚未齊備風險）</li>
+      <li><strong>Lambda Provisioned Concurrency + ARM Graviton2</strong>：成本與體驗平衡</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ===== Architecture ===== -->
+<section id="architecture">
+  <div class="section-title">
+    <span class="section-num">02</span>
+    <h2>整體架構藍圖</h2>
+  </div>
+  <p class="section-subtitle">v2 完整資料流：從每日定時觸發、SQS fan-out 並發處理、AI 分析、到 LINE 推播 + 使用者查詢</p>
+
+  <div class="mermaid-container">
+    <div class="mermaid">
+flowchart TB
+    subgraph Trigger["⏰ 定時觸發層"]
+        EB[EventBridge<br/>每交易日 15:30]
+    end
+
+    subgraph DataSource["📡 資料源（含 Fallback）"]
+        TWSE[(TWSE OpenAPI<br/>主源)]
+        FM[(FinMind<br/>備源)]
+        YF[(yfinance<br/>最終備援)]
+    end
+
+    subgraph Ingest["🔄 採集與分派"]
+        DSP[Dispatcher Lambda<br/>取得股票清單]
+        SQS1{{SQS Queue<br/>StockTasks}}
+        DLQ1{{DLQ<br/>FailedTasks}}
+    end
+
+    subgraph Process["⚙️ 並發處理層"]
+        W1[Worker Lambda × N<br/>ETL + 技術指標計算]
+    end
+
+    subgraph Storage["💾 儲存層"]
+        S3[(S3<br/>raw + Parquet)]
+        DDB[(DynamoDB<br/>+ GSI1, GSI2)]
+    end
+
+    subgraph AI["🧠 AI 分析層"]
+        STR[DynamoDB Streams]
+        AN[Analyzer Lambda]
+        BR[Amazon Bedrock<br/>Claude 4.5 Haiku]
+        VAL[Output Validator<br/>JSON Schema]
+    end
+
+    subgraph Notify["📲 推播層"]
+        SNS[SNS Topic]
+        LN[LINE Push API<br/>Flex Message]
+    end
+
+    subgraph Query["🔍 使用者查詢"]
+        USR((使用者))
+        LP[LINE Platform]
+        APIGW[API Gateway<br/>+ HMAC 驗章]
+        QL[Query Lambda<br/>Provisioned Concurrency]
+    end
+
+    subgraph Security["🔐 安全與密鑰"]
+        SM[Secrets Manager]
+        IAM[IAM Role<br/>最小權限]
+    end
+
+    subgraph Observe["📊 監控告警"]
+        CW[CloudWatch<br/>Logs + Metrics]
+        AL[CloudWatch Alarm]
+    end
+
+    EB --> DSP
+    TWSE --> DSP
+    DSP --> SQS1
+    SQS1 -.失敗 3 次.-> DLQ1
+    SQS1 --> W1
+    W1 --> S3
+    W1 --> DDB
+    W1 -.fallback.-> FM
+    FM -.fallback.-> YF
+    DDB --> STR
+    STR --> AN
+    AN --> BR
+    BR --> VAL
+    VAL -->|通過| SNS
+    VAL -.失敗.-> DLQ1
+    SNS --> LN
+    USR --> LP
+    LP --> APIGW
+    APIGW --> QL
+    QL --> DDB
+    QL --> LN
+    SM -.提供 Token.-> LN
+    SM -.提供 Token.-> QL
+    IAM -.授權.-> W1
+    IAM -.授權.-> AN
+    W1 --> CW
+    AN --> CW
+    CW --> AL
+    AL -.email/SMS.-> USR
+
+    classDef triggerStyle fill:#fef3c7,stroke:#f59e0b,color:#92400e
+    classDef sourceStyle fill:#dbeafe,stroke:#3b82f6,color:#1e40af
+    classDef processStyle fill:#ede9fe,stroke:#8b5cf6,color:#5b21b6
+    classDef storageStyle fill:#d1fae5,stroke:#10b981,color:#065f46
+    classDef aiStyle fill:#fce7f3,stroke:#ec4899,color:#9f1239
+    classDef notifyStyle fill:#ffe4e6,stroke:#f43f5e,color:#9f1239
+    classDef securityStyle fill:#fef2f2,stroke:#ef4444,color:#991b1b
+
+    class EB triggerStyle
+    class TWSE,FM,YF sourceStyle
+    class DSP,W1,AN,VAL,QL,APIGW processStyle
+    class S3,DDB storageStyle
+    class BR aiStyle
+    class SNS,LN,LP notifyStyle
+    class SM,IAM securityStyle
+    </div>
+  </div>
+  <div class="diagram-caption">圖 1：v2 完整架構圖 — 補上 SQS、DLQ、Secrets Manager、API Gateway 後的企業級設計</div>
+
+  <h3 style="margin-top:32px; color: var(--primary); font-size:18px;">⚡ 核心設計原則</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>原則</th>
+        <th>落實方式</th>
+        <th>價值</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>低 TCO</strong></td>
+        <td>純 Serverless + On-Demand DynamoDB + ARM Graviton2</td>
+        <td>月成本 $8-15，零閒置費用</td>
+      </tr>
+      <tr>
+        <td><strong>解耦設計</strong></td>
+        <td>EventBridge → SQS → Lambda → DDB Streams → Lambda</td>
+        <td>單點故障不影響整體</td>
+      </tr>
+      <tr>
+        <td><strong>容錯機制</strong></td>
+        <td>SQS DLQ + 資料源 Strategy Pattern + LLM Output Validation</td>
+        <td>三層保護，符合企業級可靠性</td>
+      </tr>
+      <tr>
+        <td><strong>最小權限</strong></td>
+        <td>每個 Lambda 獨立 IAM Role，僅可存取必要資源</td>
+        <td>符合 AWS Well-Architected Security Pillar</td>
+      </tr>
+      <tr>
+        <td><strong>密鑰管理</strong></td>
+        <td>Secrets Manager + Lambda 容器內快取</td>
+        <td>杜絕 Token 外洩風險</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===== Stages ===== -->
+<section id="stages">
+  <div class="section-title">
+    <span class="section-num">03</span>
+    <h2>五階段工作細節</h2>
+  </div>
+  <p class="section-subtitle">每階段附帶 Goal、Work Breakdown、優先級標記與技術選型理由</p>
+
+  <!-- Stage 1 -->
+  <div class="stage-card stage-1">
+    <div class="stage-header">
+      <span class="stage-num">01</span>
+      <div class="stage-title">
+        <h3>基礎設施與環境自動化 (IaC)</h3>
+        <div class="stage-goal">🎯 使用 Terraform 定義所有雲端資源，確保環境可重複部署、可版本控制</div>
+      </div>
+    </div>
+    <div class="stage-body">
+
+      <div class="work-item">
+        <div class="work-item-title">Provider 與區域配置</div>
+        <p>AWS 區域選 <code>ap-northeast-1</code>（東京）— 對台灣 ms 級延遲，Bedrock Claude 4.5 系列已全面上架。Backend State 存於 S3 + DynamoDB Lock。</p>
+      </div>
+
+      <div class="work-item priority-new">
+        <div class="work-item-title">
+          IAM 最小權限設計
+          <span class="tag improve">v2 強化</span>
+        </div>
+        <p>每個 Lambda 一個獨立 Role，例如 <code>worker-lambda-role</code> 僅有：
+          <code>s3:PutObject</code>（指定 bucket）、<code>dynamodb:PutItem</code>（指定 table）、
+          <code>sqs:DeleteMessage</code>（指定 queue）、<code>secretsmanager:GetSecretValue</code>（指定 secret ARN）。</p>
+      </div>
+
+      <div class="work-item">
+        <div class="work-item-title">儲存層</div>
+        <p><strong>S3</strong>：<code>twstock-raw-{env}</code>（原始）、<code>twstock-curated-{env}</code>（Parquet）；
+          開 Versioning、Lifecycle 90 天轉 Glacier。<br>
+          <strong>DynamoDB</strong>：<code>StockAnalysisTable</code> + 兩個 GSI（詳見 Schema 章節），On-Demand 計費。</p>
+      </div>
+
+      <div class="work-item priority-new">
+        <div class="work-item-title">
+          Secrets Manager
+          <span class="tag new">v2 新增</span>
+        </div>
+        <p>建立 secret：<code>line/channel-token</code>、<code>line/channel-secret</code>、<code>finmind/api-key</code>。
+          所有 Lambda 啟動時透過 boto3 拉取並 <code>@lru_cache</code> 快取。</p>
+      </div>
+
+      <div class="work-item">
+        <div class="work-item-title">ECR 映像檔倉庫</div>
+        <p>建立 <code>twstock-lambda</code> repository，啟用 image scanning（CVE 自動掃描）、lifecycle 保留最近 10 個版本。</p>
+      </div>
+
+      <div class="work-item priority-new">
+        <div class="work-item-title">
+          SQS Queue + DLQ
+          <span class="tag new">v2 新增</span>
+        </div>
+        <p><code>stock-tasks-queue</code>（Standard, visibility timeout 900s, batchSize 10）+ <code>stock-tasks-dlq</code>（最大接收次數 3）。
+          所有失敗訊息進 DLQ 等人工排查。</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Stage 2 -->
+  <div class="stage-card stage-2">
+    <div class="stage-header">
+      <span class="stage-num">02</span>
+      <div class="stage-title">
+        <h3>數據採集與 ETL 引擎 (Containerized Lambda)</h3>
+        <div class="stage-goal">🎯 建立穩定、具備容錯能力且資料源可切換的資料管線</div>
+      </div>
+    </div>
+    <div class="stage-body">
+
+      <div class="work-item">
+        <div class="work-item-title">Docker 化環境</div>
+        <p>基礎映像檔 <code>public.ecr.aws/lambda/python:3.11-arm64</code>（ARM Graviton2，成本省 20%）。
+          安裝 <code>pandas</code>、<code>pyarrow</code>、<code>requests</code>、<code>boto3</code>。</p>
+      </div>
+
+      <div class="work-item priority-high">
+        <div class="work-item-title">
+          資料源 Strategy Pattern
+          <span class="tag fix">v2 重大修正</span>
+        </div>
+        <p>抽象 <code>StockDataSource</code> 介面，實作三種來源並建立 fallback chain：
+          <br>① <code>TWSEAPISource</code>（主源，官方 OpenAPI 免費穩定）
+          <br>② <code>FinMindSource</code>（備源，免費版 600 req/hr 足夠）
+          <br>③ <code>YFinanceSource</code>（最終備援）
+          <br>主源失敗自動切換，並寫入 CloudWatch Custom Metric 追蹤可用性。</p>
+      </div>
+
+      <div class="work-item">
+        <div class="work-item-title">抓取欄位</div>
+        <p>收盤價、開高低、成交量、三大法人買賣超、PE/PB；計算 MA5/MA20/MA60、RSI(14)、KD、MACD。</p>
+      </div>
+
+      <div class="work-item">
+        <div class="work-item-title">冪等性（Idempotency）</div>
+        <p>每筆 SQS 訊息含 <code>StockID + TradeDate</code>；Worker 寫入 DDB 時使用條件式寫入
+          <code>attribute_not_exists(StockID)</code>，重複觸發不會覆蓋。</p>
+      </div>
+
+      <div class="work-item">
+        <div class="work-item-title">持久化雙軌</div>
+        <p><strong>Hot Path</strong>：DynamoDB 寫入即時特徵供 AI 分析使用（毫秒級讀取）。
+          <br><strong>Cold Path</strong>：S3 Parquet 按 <code>year=/month=/day=</code> partition 存放，未來 Athena 直接查詢。</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Stage 3 -->
+  <div class="stage-card stage-3">
+    <div class="stage-header">
+      <span class="stage-num">03</span>
+      <div class="stage-title">
+        <h3>AI 智能分析與決策 (LLM Integration)</h3>
+        <div class="stage-goal">🎯 引入 LLM 將技術指標轉化為人類可讀的投資建議，並嚴控幻覺</div>
+      </div>
+    </div>
+    <div class="stage-body">
+
+      <div class="work-item priority-high">
+        <div class="work-item-title">
+          模型選擇：Claude 4.5 Haiku
+          <span class="tag fix">v2 升級</span>
+        </div>
+        <p>v1 規劃的 Claude 3 Haiku 已是舊型號。改用 <code>claude-haiku-4-5-20251001</code>：
+          推理品質提升、成本相當（詳見成本對比章節）。Bedrock <code>ap-northeast-1</code> 已上架。</p>
+      </div>
+
+      <div class="work-item">
+        <div class="work-item-title">Prompt Engineering</div>
+        <p>System Prompt 設定 AI 為「資深量化分析師」，明確規定：
+          ① 僅使用輸入 JSON 中的數據；
+          ② 禁止推測未提供的資訊；
+          ③ 輸出 JSON 格式（含 <code>signal</code>、<code>confidence</code>、<code>summary</code> 三個欄位）。</p>
+      </div>
+
+      <div class="work-item priority-new">
+        <div class="work-item-title">
+          Output Validation 層
+          <span class="tag new">v2 新增</span>
+        </div>
+        <p>Bedrock 回傳後用 Pydantic 驗證 schema；
+          若 <code>confidence &lt; 0.6</code> 或 schema 不符 → 走 fallback 規則引擎（純技術指標訊號）；
+          確保 LINE 推播 100% 是結構化、可控的訊息。</p>
+      </div>
+
+      <div class="work-item">
+        <div class="work-item-title">穩定性參數</div>
+        <p><code>temperature=0</code>、<code>top_p=0.95</code>、<code>max_tokens=300</code>。
+          確保同樣輸入產生同樣輸出，便於回測與品質追蹤。</p>
+      </div>
+
+      <div class="work-item priority-new">
+        <div class="work-item-title">
+          Grounding 強化
+          <span class="tag new">v2 新增</span>
+        </div>
+        <p>System Prompt 內嵌「禁區清單」：禁止輸出明確買賣建議（合規）、禁止承諾收益、禁止提及輸入外的個股。
+          下游 Output Validator 也對這些禁區做關鍵字過濾雙重保險。</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Stage 4 -->
+  <div class="stage-card stage-4">
+    <div class="stage-header">
+      <span class="stage-num">04</span>
+      <div class="stage-title">
+        <h3>自動化部署與監控 (DevOps & Observability)</h3>
+        <div class="stage-goal">🎯 全自動部署，問題發生時主動告警，符合企業 SRE 標準</div>
+      </div>
+    </div>
+    <div class="stage-body">
+
+      <div class="work-item">
+        <div class="work-item-title">CI/CD Pipeline (GitHub Actions)</div>
+        <p>Push → Lint (ruff) → Test (pytest + moto mock) → Docker Build (multi-arch) → 推送 ECR →
+          Terraform Plan → 人工 Approve → Terraform Apply → 更新 Lambda image。
+          <br>使用 OIDC 而非長期 IAM Key，符合最佳實務。</p>
+      </div>
+
+      <div class="work-item priority-new">
+        <div class="work-item-title">
+          觸發時間調整：15:00 → 15:30
+          <span class="tag fix">v2 修正</span>
+        </div>
+        <p>TWSE 盤後資料 14:30 才齊備，原本 15:00 觸發有抓到舊資料風險。改 15:30 並加上資料新鮮度檢查（若 TradeDate ≠ today 拋告警）。</p>
+      </div>
+
+      <div class="work-item priority-new">
+        <div class="work-item-title">
+          三層告警策略
+          <span class="tag improve">v2 強化</span>
+        </div>
+        <p>
+          <strong>Layer 1 INFO</strong>：DLQ 累積 ≥ 5 → SNS Email
+          <br><strong>Layer 2 WARN</strong>：資料源 fallback 觸發 → SNS Email + LINE
+          <br><strong>Layer 3 CRIT</strong>：Lambda 連續失敗 ≥ 3 次 → SNS SMS（緊急）
+        </p>
+      </div>
+
+      <div class="work-item">
+        <div class="work-item-title">可觀測性（Observability）</div>
+        <p>所有 Lambda 開啟 X-Ray Tracing；CloudWatch Dashboard 顯示：每日成功率、p99 延遲、Bedrock token 使用量、月成本走勢。</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Stage 5 -->
+  <div class="stage-card stage-5">
+    <div class="stage-header">
+      <span class="stage-num">05</span>
+      <div class="stage-title">
+        <h3>前端輸出與使用者互動 (Interface)</h3>
+        <div class="stage-goal">🎯 雙向 LINE Bot：自動推播 + 隨時查詢</div>
+      </div>
+    </div>
+    <div class="stage-body">
+
+      <div class="work-item">
+        <div class="work-item-title">LINE 推播（Push API）</div>
+        <p>SNS → Lambda → LINE Messaging API；使用 Flex Message 排版，顯示股號、訊號類型、技術指標雷達圖、AI 摘要。</p>
+      </div>
+
+      <div class="work-item priority-new">
+        <div class="work-item-title">
+          API Gateway Webhook 流程
+          <span class="tag new">v2 新增完整流程</span>
+        </div>
+        <p>使用者訊息 → LINE Platform 推送 Webhook → API Gateway (HTTPS) → Lambda；
+          Lambda 內必須驗證 <code>X-Line-Signature</code> HMAC-SHA256 簽章，防偽造請求。</p>
+      </div>
+
+      <div class="work-item priority-new">
+        <div class="work-item-title">
+          Query Lambda Provisioned Concurrency
+          <span class="tag new">v2 新增</span>
+        </div>
+        <p>為避免 Docker Lambda cold start（可達 5-15 秒），查詢用 Lambda 開 Provisioned Concurrency = 1（月成本約 $3）。
+          使用者體驗從「等待約 10 秒」降到「&lt; 500ms」。</p>
+      </div>
+
+      <div class="work-item">
+        <div class="work-item-title">查詢功能</div>
+        <p>支援指令：<code>查詢 2330</code>（個股最新分析）、<code>訂閱 2330</code>（加入推播清單）、<code>取消 2330</code>。
+          清單存 DynamoDB <code>UserSubscriptions</code> table。</p>
+      </div>
+
+    </div>
+  </div>
+
+  <h3 style="margin-top:32px; color: var(--primary); font-size:18px;">📞 LINE Bot 互動序列圖</h3>
+  <div class="mermaid-container">
+    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor U as 使用者
+    participant LP as LINE Platform
+    participant AG as API Gateway
+    participant L as Query Lambda
+    participant SM as Secrets Manager
+    participant DDB as DynamoDB
+
+    U->>LP: 輸入「查詢 2330」
+    LP->>AG: POST /webhook<br/>X-Line-Signature
+    AG->>L: invoke
+    L->>L: 驗證 HMAC 簽章
+    Note over L: 簽章失敗則 return 401
+    L->>SM: 取得 LINE Channel Token<br/>（@lru_cache 命中則跳過）
+    SM-->>L: token
+    L->>DDB: Query StockID=2330<br/>order by TradeDate DESC limit 1
+    DDB-->>L: 最新分析資料
+    L->>LP: Reply API + Flex Message
+    LP->>U: 顯示分析結果
+    </div>
+  </div>
+  <div class="diagram-caption">圖 2：使用者查詢個股的完整 Webhook 流程</div>
+
+</section>
+
+<!-- ===== Schemas ===== -->
+<section id="schemas">
+  <div class="section-title">
+    <span class="section-num">04</span>
+    <h2>階段間 Schema 契約</h2>
+  </div>
+  <p class="section-subtitle">真正的「合約導向設計」— 每個階段輸入/輸出格式明確，AI Agent 可直接生成對應的 dataclass 與測試</p>
+
+  <h3 style="color: var(--primary); margin-top:20px;">📦 階段二輸出：StockFeature</h3>
+  <div class="schema-card">
+<span class="comment"># SQS Message Body → Worker Lambda 處理後寫入 DynamoDB</span>
+<span class="keyword">class</span> StockFeature(BaseModel):
+    StockID:           <span class="type">str</span>      <span class="comment"># "2330"</span>
+    TradeDate:         <span class="type">int</span>      <span class="comment"># 20260524 (YYYYMMDD)</span>
+    Close:             <span class="type">float</span>    <span class="comment"># 收盤價</span>
+    Open:              <span class="type">float</span>
+    High:              <span class="type">float</span>
+    Low:               <span class="type">float</span>
+    Volume:            <span class="type">int</span>      <span class="comment"># 成交量（張）</span>
+    ForeignNetBuy:     <span class="type">int</span>      <span class="comment"># 外資買賣超（張，負值代表賣超）</span>
+    TrustNetBuy:       <span class="type">int</span>      <span class="comment"># 投信買賣超</span>
+    DealerNetBuy:      <span class="type">int</span>      <span class="comment"># 自營商買賣超</span>
+    PE:                <span class="type">float</span>
+    PB:                <span class="type">float</span>
+    MA5:               <span class="type">float</span>
+    MA20:              <span class="type">float</span>
+    MA60:              <span class="type">float</span>
+    RSI14:             <span class="type">float</span>    <span class="comment"># 0~100</span>
+    Source:            <span class="type">str</span>      <span class="comment"># "TWSE" | "FinMind" | "yfinance"</span>
+    IngestedAt:        <span class="type">str</span>      <span class="comment"># ISO8601</span>
+  </div>
+
+  <h3 style="color: var(--primary); margin-top:24px;">🧠 階段三輸出：AIAnalysisResult</h3>
+  <div class="schema-card">
+<span class="comment"># Bedrock Claude 4.5 Haiku 輸出，必須通過 Output Validator</span>
+<span class="keyword">class</span> AIAnalysisResult(BaseModel):
+    StockID:       <span class="type">str</span>
+    TradeDate:     <span class="type">int</span>
+    Signal:        Literal[<span class="string">"OVERSOLD"</span>, <span class="string">"OVERBOUGHT"</span>, <span class="string">"NEUTRAL"</span>, <span class="string">"BREAKOUT"</span>]
+    Confidence:    <span class="type">float</span>           <span class="comment"># 0~1, &lt;0.6 觸發 fallback</span>
+    Summary:       <span class="type">str</span>             <span class="comment"># max 100 字</span>
+    KeyMetrics:    <span class="type">dict</span>            <span class="comment"># {"RSI": 28.5, "MA5_vs_MA20": "below"}</span>
+    GeneratedBy:   <span class="type">str</span>             <span class="comment"># "bedrock" | "rule-engine-fallback"</span>
+    ModelVersion:  <span class="type">str</span>             <span class="comment"># "claude-haiku-4-5-20251001"</span>
+    GeneratedAt:   <span class="type">str</span>
+  </div>
+
+  <h3 style="color: var(--primary); margin-top:24px;">💾 DynamoDB Table 設計（含 GSI）</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>表/索引</th>
+        <th>Partition Key</th>
+        <th>Sort Key</th>
+        <th>用途</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>主表</strong></td>
+        <td><code>StockID</code> (S)</td>
+        <td><code>TradeDate</code> (N)</td>
+        <td>查詢個股歷史（基本場景）</td>
+      </tr>
+      <tr>
+        <td><strong>GSI1</strong> 按日期橫切</td>
+        <td><code>TradeDate</code> (N)</td>
+        <td><code>RSI14</code> (N)</td>
+        <td>「今日所有 RSI &lt; 30 的股票」</td>
+      </tr>
+      <tr>
+        <td><strong>GSI2</strong> 訊號聚合 (Sparse)</td>
+        <td><code>SignalType</code> (S)</td>
+        <td><code>TradeDate#StockID</code> (S)</td>
+        <td>「最近 7 天觸發 OVERSOLD 的所有股票」<br><em>只有觸發訊號的項目寫入此欄位，省成本</em></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===== Cost Analysis ===== -->
+<section id="cost">
+  <div class="section-title">
+    <span class="section-num">05</span>
+    <h2>Bedrock 模型成本分析</h2>
+  </div>
+  <p class="section-subtitle">每天分析 1000 支股票、每支平均 input 500 tokens / output 200 tokens 計算</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>模型</th>
+        <th>Input ($/1M tokens)</th>
+        <th>Output ($/1M tokens)</th>
+        <th>每日成本</th>
+        <th>每月成本</th>
+        <th>建議用途</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Claude 4.5 Haiku</strong> ⭐</td>
+        <td>$1.00</td>
+        <td>$5.00</td>
+        <td>$1.50</td>
+        <td><strong>≈ $45</strong></td>
+        <td>批次摘要主力（v2 推薦）</td>
+      </tr>
+      <tr>
+        <td>Claude 4.6 Sonnet</td>
+        <td>$3.00</td>
+        <td>$15.00</td>
+        <td>$4.50</td>
+        <td>≈ $135</td>
+        <td>高品質深度分析（精選股）</td>
+      </tr>
+      <tr>
+        <td>Claude 4.7 Opus</td>
+        <td>$15.00</td>
+        <td>$75.00</td>
+        <td>$22.50</td>
+        <td>≈ $675</td>
+        <td>過貴，不適合此場景</td>
+      </tr>
+      <tr style="background:#fef2f2;">
+        <td>Claude 3 Haiku <span class="cross">舊</span></td>
+        <td>$0.25</td>
+        <td>$1.25</td>
+        <td>$0.375</td>
+        <td>≈ $11</td>
+        <td>v1 規劃，已過時不推薦</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="changes-box">
+    <h4>💡 成本策略：混合模型 Routing</h4>
+    <ul>
+      <li><strong>預設用 Haiku 4.5</strong>：1000 支股票每日批次分析，$45/月可負擔</li>
+      <li><strong>觸發訊號的個股升級 Sonnet 4.6</strong>：估計每日 10-20 支會觸發訊號，額外成本 &lt; $5/月</li>
+      <li><strong>使用者查詢功能用 Haiku 4.5</strong>：即時回應、成本可預測</li>
+      <li><strong>總計月成本約 $50</strong>（含其他 AWS 服務約 $60-70），符合 Side Project 預算</li>
+    </ul>
+  </div>
+
+  <h3 style="color: var(--primary); margin-top:24px;">📊 整體 AWS 服務月成本估算</h3>
+  <table>
+    <thead>
+      <tr><th>服務</th><th>用量假設</th><th>月成本</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Lambda (Worker + Analyzer)</td><td>1000 invokes/day × 30s × 512MB, ARM</td><td>$0.50</td></tr>
+      <tr><td>Lambda (Query, Provisioned Concurrency=1)</td><td>1 instance × 24h × 30d</td><td>$3.00</td></tr>
+      <tr><td>Bedrock Claude 4.5 Haiku</td><td>1000 calls/day, 平均 700 tokens</td><td>$45</td></tr>
+      <tr><td>DynamoDB On-Demand</td><td>~50K WCU + 100K RCU/月</td><td>$2.50</td></tr>
+      <tr><td>S3 + Lifecycle</td><td>~5GB Parquet + Glacier</td><td>$0.50</td></tr>
+      <tr><td>SQS + DLQ</td><td>~30K messages/月</td><td>$0.01</td></tr>
+      <tr><td>API Gateway</td><td>~3000 requests/月</td><td>$0.01</td></tr>
+      <tr><td>CloudWatch Logs + Metrics</td><td>~1GB/月 + X-Ray</td><td>$2.00</td></tr>
+      <tr><td>Secrets Manager</td><td>3 secrets</td><td>$1.20</td></tr>
+      <tr style="background:var(--gray-100); font-weight:700;">
+        <td colspan="2">合計</td>
+        <td>≈ $55/月</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===== Roadmap ===== -->
+<section id="roadmap">
+  <div class="section-title">
+    <span class="section-num">06</span>
+    <h2>未來精進三波路線圖</h2>
+  </div>
+  <p class="section-subtitle">按 ROI 排序，每波都對應求職競爭力的具體強化點</p>
+
+  <div class="roadmap-wave wave-1">
+    <div class="wave-header">
+      <span class="wave-medal">🥇</span>
+      <span class="wave-title">第一波：3 個月內（最高 ROI）</span>
+      <span class="wave-timeframe">2026 Q3</span>
+    </div>
+
+    <div class="roadmap-item">
+      <h5>① 新聞情緒分析 RAG 模組</h5>
+      <p>整合 firecrawl 爬鉅亨網/MoneyDJ 個股新聞 → Bedrock Titan Embeddings 向量化 → S3 Vectors → 分析時 RAG 拉取相關新聞注入 prompt。從「規則型告警」升級為「多模態 RAG 落地」，是 2026 年最熱門的 LLM 應用題型。</p>
+    </div>
+    <div class="roadmap-item">
+      <h5>② OpenMetadata 資料治理整合</h5>
+      <p>把專案所有資料來源/transformation/輸出登錄 OpenMetadata，產生完整 Lineage 圖。面試 SA 職位時直接展示 lineage 截圖，是中華電信 SA 經驗轉成科技業語言的最佳證明。</p>
+    </div>
+    <div class="roadmap-item">
+      <h5>③ dbt + Athena 歷史回測層</h5>
+      <p>S3 Parquet → Glue Catalog → Athena → dbt models（staging / intermediate / marts）。產出真實的勝率數字（例：「RSI &lt; 30 買入 5 日後勝率 62%」）。有數字的 Side Project &gt;&gt; 沒數字的 Side Project。</p>
+    </div>
+  </div>
+
+  <div class="roadmap-wave wave-2">
+    <div class="wave-header">
+      <span class="wave-medal">🥈</span>
+      <span class="wave-title">第二波：6 個月內（差異化競爭力）</span>
+      <span class="wave-timeframe">2026 Q4 - 2027 Q1</span>
+    </div>
+
+    <div class="roadmap-item">
+      <h5>④ Multi-Agent 協作架構</h5>
+      <p>拆成 Technical Agent（技術指標）+ Sentiment Agent（新聞情緒）+ Risk Agent（波動度），最後 Coordinator Agent 整合。可用 LangGraph 或 AWS Bedrock Agents / Strands 框架實作。</p>
+    </div>
+    <div class="roadmap-item">
+      <h5>⑤ Streamlit/Next.js 視覺化 Dashboard</h5>
+      <p>Streamlit 快速版 demo 歷史績效、Next.js + Amplify 正式版做面試 portfolio 站。展示「訊號歷史勝率」「系統健康度」「成本追蹤」三個圖表。</p>
+    </div>
+    <div class="roadmap-item">
+      <h5>⑥ 完整英文文件三件套</h5>
+      <p>README.md（架構與快速啟動）+ RUNBOOK.md（oncall 故障排查）+ COST_ANALYSIS.md（容量與成本規劃）。新加坡遠端職位的標配武器。</p>
+    </div>
+  </div>
+
+  <div class="roadmap-wave wave-3">
+    <div class="wave-header">
+      <span class="wave-medal">🥉</span>
+      <span class="wave-title">第三波：長期願景</span>
+      <span class="wave-timeframe">2027+</span>
+    </div>
+
+    <div class="roadmap-item">
+      <h5>⑦ ML 評分層替代規則引擎</h5>
+      <p>SageMaker + XGBoost 做多因子打分模型，取代純規則篩選。從「自動化系統」進化為「智能系統」。</p>
+    </div>
+    <div class="roadmap-item">
+      <h5>⑧ 跨資產延伸：美股 / 加密貨幣 / ETF</h5>
+      <p>證明架構是 generic 的，能輕易擴充新資料來源 — 這是企業架構師最高評價標準。</p>
+    </div>
+    <div class="roadmap-item">
+      <h5>⑨ 多區域災難復原（DR）</h5>
+      <p>Terraform Module 化後一鍵部署到 ap-southeast-1（新加坡）作為災難復原區，符合企業級 SLA 要求。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Positioning ===== -->
+<section id="positioning">
+  <div class="section-title">
+    <span class="section-num">07</span>
+    <h2>求職定位策略</h2>
+  </div>
+  <p class="section-subtitle">同一個專案，三種敘事方式對應三種職位</p>
+
+  <div class="positioning-grid">
+
+    <div class="pos-card csa">
+      <h4>🏛️ 雲端架構師 (CSA)</h4>
+      <div class="pos-tagline">強調系統設計與成本治理能力</div>
+      <table>
+        <thead>
+          <tr><th>展示點</th><th>對應能力</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Terraform 全資源 IaC</td><td>環境治理、災難恢復</td></tr>
+          <tr><td>EventBridge + SQS + DDB Streams</td><td>分散式系統設計</td></tr>
+          <tr><td>ARM Graviton + Provisioned Concurrency</td><td>效能與成本平衡</td></tr>
+          <tr><td>LLM Grounding + Output Validation</td><td>AI 落地實戰</td></tr>
+        </tbody>
+      </table>
+      <div class="interview-quote">
+        我選 Lambda 而非 ECS Fargate，是基於 TCO 計算：每日只跑 1 小時，Serverless 月成本 $5，Fargate 至少 $30。但對使用者查詢功能我加 Provisioned Concurrency，因為 cold start 會破壞體驗——這是用情境驅動架構決策。
+      </div>
+    </div>
+
+    <div class="pos-card de">
+      <h4>🔧 資深資料工程師 (Sr DE)</h4>
+      <div class="pos-tagline">強調 Pipeline 可靠性與資料治理</div>
+      <table>
+        <thead>
+          <tr><th>展示點</th><th>對應能力</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Parquet on S3 + DynamoDB 雙軌</td><td>OLAP vs OLTP 設計</td></tr>
+          <tr><td>冪等性 + Strategy Pattern</td><td>Pipeline 可靠性</td></tr>
+          <tr><td>Schema 契約 + Pydantic 驗證</td><td>Data Contract 概念</td></tr>
+          <tr><td>GSI Sparse Index 設計</td><td>NoSQL 進階技法</td></tr>
+        </tbody>
+      </table>
+      <div class="interview-quote">
+        我把資料層做成雙軌：DynamoDB 給 LINE 即時查詢，S3 Parquet 留給未來 Athena 做歷史回測——借鏡 Lambda Architecture，把 hot path 和 cold path 分開。這讓未來要做 ML 模型訓練時，資料源已經就緒。
+      </div>
+    </div>
+
+    <div class="pos-card sg">
+      <h4>🌏 新加坡遠端職位</h4>
+      <div class="pos-tagline">英文文件 + 跨時區協作 + 成本透明</div>
+      <table>
+        <thead>
+          <tr><th>必備文件</th><th>說明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>README.md (英文)</td><td>架構、快速啟動、技術選型理由</td></tr>
+          <tr><td>RUNBOOK.md</td><td>oncall 故障排查手冊</td></tr>
+          <tr><td>COST_ANALYSIS.md</td><td>月成本估算、容量規劃</td></tr>
+          <tr><td>架構決策紀錄 (ADR)</td><td>每個重大決策的 trade-off 記錄</td></tr>
+        </tbody>
+      </table>
+      <div class="interview-quote">
+        I designed this system with operational excellence in mind. The RUNBOOK documents exactly how to debug each failure mode, so any engineer can take over with one hour of reading — that's my standard for production-ready systems.
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ===== Action ===== -->
+<section id="action">
+  <div class="section-title">
+    <span class="section-num">08</span>
+    <h2>立即可執行的下一步</h2>
+  </div>
+
+  <div class="action-box">
+    <h3>🚀 v2 規劃書定稿後，建議按以下順序動工</h3>
+    <ul class="action-list">
+      <li>
+        <span class="action-num">1</span>
+        <div>
+          <strong>Week 1-2：階段一 IaC 全部完成</strong><br>
+          <span style="opacity:0.9;font-size:14px;">Terraform 寫完 → CI/CD 跑通 → 證明「一鍵部署」可行</span>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">2</span>
+        <div>
+          <strong>Week 3-4：階段二 ETL + Strategy Pattern</strong><br>
+          <span style="opacity:0.9;font-size:14px;">先把 TWSE 主源跑通，再補 FinMind/yfinance fallback</span>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">3</span>
+        <div>
+          <strong>Week 5：階段三 Bedrock + Output Validator</strong><br>
+          <span style="opacity:0.9;font-size:14px;">先用 5 支股票做 PoC，跑通 Validator → 再放大到全市場</span>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">4</span>
+        <div>
+          <strong>Week 6：階段四 監控與告警</strong><br>
+          <span style="opacity:0.9;font-size:14px;">CloudWatch Dashboard + 三層告警策略上線</span>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">5</span>
+        <div>
+          <strong>Week 7-8：階段五 LINE Bot + API Gateway Webhook</strong><br>
+          <span style="opacity:0.9;font-size:14px;">完成 push + query 雙向互動，記得 HMAC 驗章</span>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">6</span>
+        <div>
+          <strong>Week 9：英文 README + RUNBOOK + 架構圖</strong><br>
+          <span style="opacity:0.9;font-size:14px;">把這份規劃書的圖與內容翻譯成英文，做成 GitHub Repo 的 portfolio</span>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">7</span>
+        <div>
+          <strong>Week 10+：開始投履歷，並啟動第一波精進</strong><br>
+          <span style="opacity:0.9;font-size:14px;">RAG 新聞模組是面試最大殺手鐧</span>
+        </div>
+      </li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <p>📄 文件版本：v2.0 | 撰寫日期：2026-05-24 | 作者：Wendy Tsai</p>
+  <p>本文件為 AI Agent 友善設計，每階段內容可直接輸入 Claude / GPT 生成對應程式碼</p>
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    themeVariables: {
+      primaryColor: '#dbeafe',
+      primaryTextColor: '#1e3a5f',
+      primaryBorderColor: '#3b82f6',
+      lineColor: '#6b7280',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif',
+      fontSize: '14px'
+    },
+    flowchart: {
+      curve: 'basis',
+      padding: 20
+    },
+    sequence: {
+      actorMargin: 60,
+      noteMargin: 16
+    }
+  });
+</script>
+
+</body>
+</html>

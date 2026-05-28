@@ -1,0 +1,151 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.Python
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+wheels/
+share/python-wheels/
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# ===== Testing & Coverage =====
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# ===== Terraform =====
+# Local state files (NEVER commit — use S3 backend)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Crash logs
+crash.log
+crash.*.log
+
+# tfvars often contain secrets
+*.tfvars
+*.tfvars.json
+!example.tfvars
+!terraform.tfvars.example
+
+# Override files for local-only changes
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform CLI configuration
+.terraformrc
+terraform.rc
+.terraform/
+.terraform.lock.hcl
+
+# Plan output (may contain sensitive data)
+*tfplan*
+*.tfplan
+
+# ===== AWS / Lambda =====
+# Lambda deployment packages
+*.zip
+lambda-package/
+lambda-layer/
+build-lambda/
+
+# AWS SAM
+.aws-sam/
+samconfig.toml
+
+# AWS credentials
+.aws/credentials
+.aws/config
+
+# ===== Secrets / Sensitive =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+credentials
+credentials.json
+secrets.yaml
+secrets.json
+
+# ===== IDE / Editor =====
+.vscode/
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# ===== OS =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Windows / Cygwin bash crash dumps
+*.stackdump
+
+# ===== Project-specific =====
+# Local data exports / scratch
+data/
+local_data/
+scratch/
+tmp/
+*.parquet
+*.csv
+!sample_data/*.csv
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Mypy / Ruff caches
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+
+# Log files
+*.log
+logs/
+
+# Mac quarantine
+*.app

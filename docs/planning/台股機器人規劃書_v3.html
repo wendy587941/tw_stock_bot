@@ -1,0 +1,1841 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>企業級全自動台股 AI 投資預警系統 — 規劃書 v3.0</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --primary: #1e3a5f;
+    --primary-light: #2c5282;
+    --accent: #ff6b35;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --info: #3b82f6;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+    --bronze: #cd7f32;
+    --silver: #c0c0c0;
+    --gold: #ffd700;
+    --stage-1: #6366f1;
+    --stage-2: #8b5cf6;
+    --stage-3: #ec4899;
+    --stage-4: #14b8a6;
+    --stage-5: #f59e0b;
+    --stage-6: #06b6d4;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC",
+                 "Microsoft JhengHei", "Helvetica Neue", sans-serif;
+    line-height: 1.7;
+    color: var(--gray-900);
+    background: var(--gray-50);
+    font-size: 16px;
+  }
+
+  /* ===== Header ===== */
+  header.hero {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+    color: white;
+    padding: 60px 40px 80px;
+    position: relative;
+    overflow: hidden;
+  }
+  header.hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -10%;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(255,107,53,0.15) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .hero-content { max-width: 1200px; margin: 0 auto; position: relative; z-index: 1; }
+  .hero-badges { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+  .badge {
+    display: inline-block;
+    padding: 4px 12px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    backdrop-filter: blur(10px);
+  }
+  .badge.accent { background: var(--accent); }
+  .badge.new { background: var(--success); }
+  h1.hero-title {
+    font-size: 42px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
+  }
+  .hero-subtitle {
+    font-size: 18px;
+    opacity: 0.9;
+    margin-bottom: 30px;
+  }
+  .hero-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 20px;
+    margin-top: 30px;
+  }
+  .meta-item {
+    background: rgba(255,255,255,0.1);
+    padding: 16px 20px;
+    border-radius: 8px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .meta-label { font-size: 12px; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px; }
+  .meta-value { font-size: 18px; font-weight: 600; margin-top: 4px; }
+
+  main {
+    max-width: 1200px;
+    margin: -40px auto 0;
+    padding: 0 40px 80px;
+    position: relative;
+    z-index: 2;
+  }
+
+  section {
+    background: white;
+    border-radius: 12px;
+    padding: 40px;
+    margin-bottom: 32px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.04);
+  }
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--gray-100);
+  }
+  .section-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--primary);
+    color: white;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .section-title h2 {
+    font-size: 26px;
+    color: var(--primary);
+    font-weight: 700;
+  }
+  .section-subtitle {
+    color: var(--gray-500);
+    font-size: 15px;
+    margin-top: -16px;
+    margin-bottom: 24px;
+  }
+
+  h3.sub-heading {
+    color: var(--primary);
+    font-size: 19px;
+    margin-top: 28px;
+    margin-bottom: 14px;
+    padding-left: 12px;
+    border-left: 4px solid var(--accent);
+  }
+  h4.sub-sub {
+    color: var(--gray-700);
+    font-size: 16px;
+    margin-top: 20px;
+    margin-bottom: 10px;
+  }
+
+  /* Summary Grid */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 24px;
+    margin-top: 16px;
+  }
+  .summary-text { line-height: 1.8; }
+  .summary-text p { margin-bottom: 12px; }
+  .summary-text strong { color: var(--primary); }
+  .summary-stats {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+    border-radius: 12px;
+    padding: 24px;
+    color: white;
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { font-size: 13px; opacity: 0.85; }
+  .stat-value { font-size: 22px; font-weight: 700; color: #fcd34d; }
+
+  /* Changes box */
+  .changes-box {
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    border-left: 4px solid var(--success);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin: 20px 0;
+  }
+  .changes-box h4 { color: #065f46; margin-bottom: 12px; font-size: 16px; }
+  .changes-box ul { list-style: none; }
+  .changes-box li {
+    padding: 6px 0;
+    color: #064e3b;
+    position: relative;
+    padding-left: 24px;
+  }
+  .changes-box li::before {
+    content: '✨';
+    position: absolute;
+    left: 0;
+  }
+
+  /* Mermaid container */
+  .mermaid-container {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 24px;
+    margin: 20px 0;
+    overflow-x: auto;
+  }
+  .mermaid { text-align: center; }
+  .diagram-caption {
+    text-align: center;
+    color: var(--gray-500);
+    font-size: 13px;
+    margin-top: 12px;
+    font-style: italic;
+  }
+
+  /* Medallion layers */
+  .medallion-stack {
+    margin: 24px 0;
+  }
+  .layer-card {
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 12px;
+    color: white;
+    position: relative;
+    overflow: hidden;
+  }
+  .layer-bronze {
+    background: linear-gradient(135deg, #cd7f32, #a0522d);
+  }
+  .layer-silver {
+    background: linear-gradient(135deg, #94a3b8, #64748b);
+  }
+  .layer-gold {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+  }
+  .layer-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .layer-icon { font-size: 28px; }
+  .layer-title { font-size: 18px; font-weight: 700; }
+  .layer-content {
+    background: rgba(255,255,255,0.15);
+    border-radius: 8px;
+    padding: 12px 16px;
+    backdrop-filter: blur(10px);
+  }
+  .layer-row {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 12px;
+    padding: 4px 0;
+    font-size: 14px;
+  }
+  .layer-key { opacity: 0.8; font-weight: 500; }
+  .layer-arrow {
+    text-align: center;
+    color: var(--gray-500);
+    font-size: 20px;
+    margin: -4px 0;
+  }
+
+  /* Stage Cards */
+  .stage-card {
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    margin-bottom: 24px;
+    overflow: hidden;
+  }
+  .stage-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 24px;
+    color: white;
+  }
+  .stage-1 .stage-header { background: linear-gradient(135deg, #6366f1, #4f46e5); }
+  .stage-2 .stage-header { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+  .stage-3 .stage-header { background: linear-gradient(135deg, #ec4899, #db2777); }
+  .stage-4 .stage-header { background: linear-gradient(135deg, #14b8a6, #0d9488); }
+  .stage-5 .stage-header { background: linear-gradient(135deg, #f59e0b, #d97706); }
+  .stage-6 .stage-header { background: linear-gradient(135deg, #06b6d4, #0891b2); }
+
+  .stage-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 8px;
+    font-weight: 700;
+  }
+  .stage-title { flex: 1; }
+  .stage-title h3 { font-size: 20px; margin-bottom: 4px; }
+  .stage-title .stage-goal { font-size: 13px; opacity: 0.9; font-weight: 400; }
+  .stage-body { padding: 28px; }
+
+  .work-item {
+    background: var(--gray-50);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    border-left: 3px solid var(--gray-300);
+  }
+  .work-item.priority-high { border-left-color: var(--danger); background: #fef2f2; }
+  .work-item.priority-new { border-left-color: var(--success); background: #f0fdf4; }
+  .work-item-title {
+    font-weight: 600;
+    color: var(--gray-900);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .tag {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .tag.new { background: var(--success); color: white; }
+  .tag.fix { background: var(--danger); color: white; }
+  .tag.improve { background: var(--info); color: white; }
+  .work-item p { color: var(--gray-700); font-size: 14px; line-height: 1.6; }
+  .work-item code {
+    background: white;
+    border: 1px solid var(--gray-200);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--accent);
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    background: white;
+    font-size: 14px;
+  }
+  th {
+    background: var(--primary);
+    color: white;
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--gray-200);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover { background: var(--gray-50); }
+  td code {
+    background: var(--gray-100);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--accent);
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+  }
+  .check { color: var(--success); font-weight: 700; }
+  .cross { color: var(--danger); font-weight: 700; }
+
+  /* Code blocks */
+  .code-block {
+    background: #1e293b;
+    color: #e2e8f0;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 16px 0;
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 13.5px;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .code-block .keyword { color: #f472b6; }
+  .code-block .string { color: #86efac; }
+  .code-block .comment { color: #64748b; font-style: italic; }
+  .code-block .type { color: #60a5fa; }
+  .code-block .number { color: #fbbf24; }
+  .code-block .func { color: #c4b5fd; }
+
+  .code-label {
+    background: var(--gray-700);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px 6px 0 0;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-block;
+    margin-top: 16px;
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+  }
+  .code-label + .code-block { margin-top: 0; border-radius: 0 8px 8px 8px; }
+
+  /* Dashboard mockup */
+  .dashboard-mock {
+    background: #f8fafc;
+    border: 2px dashed var(--info);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 16px 0;
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--gray-700);
+    white-space: pre;
+    overflow-x: auto;
+  }
+
+  /* Roadmap */
+  .roadmap-wave {
+    border: 2px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .roadmap-wave.wave-1 { border-color: #ffd700; background: linear-gradient(to right, #fffbeb, white 30%); }
+  .roadmap-wave.wave-2 { border-color: #c0c0c0; background: linear-gradient(to right, #f9fafb, white 30%); }
+  .roadmap-wave.wave-3 { border-color: #cd7f32; background: linear-gradient(to right, #fef3c7, white 30%); }
+  .wave-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .wave-medal { font-size: 32px; }
+  .wave-title { font-size: 20px; font-weight: 700; }
+  .wave-timeframe {
+    margin-left: auto;
+    background: var(--gray-100);
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+  }
+  .roadmap-item {
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 10px;
+  }
+  .roadmap-item h5 { color: var(--primary); font-size: 15px; margin-bottom: 6px; }
+  .roadmap-item p { font-size: 14px; color: var(--gray-700); }
+
+  /* Positioning */
+  .positioning-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 20px;
+    margin: 20px 0;
+  }
+  .pos-card {
+    border: 2px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 24px;
+    background: white;
+  }
+  .pos-card.csa { border-top: 4px solid var(--info); }
+  .pos-card.de { border-top: 4px solid var(--success); }
+  .pos-card.sg { border-top: 4px solid var(--accent); }
+  .pos-card h4 { font-size: 18px; margin-bottom: 8px; color: var(--primary); }
+  .pos-tagline { font-size: 13px; color: var(--gray-500); margin-bottom: 16px; font-style: italic; }
+  .pos-card table th { font-size: 11px; padding: 8px 12px; }
+  .pos-card table td { padding: 10px 12px; font-size: 13px; }
+  .interview-quote {
+    background: linear-gradient(135deg, #eff6ff, #dbeafe);
+    border-left: 4px solid var(--info);
+    padding: 16px 20px;
+    border-radius: 8px;
+    margin-top: 16px;
+    font-style: italic;
+    color: #1e40af;
+    font-size: 14px;
+  }
+  .interview-quote::before {
+    content: '“';
+    font-size: 32px;
+    line-height: 0;
+    vertical-align: -10px;
+    color: var(--info);
+    margin-right: 4px;
+  }
+
+  /* TOC */
+  .toc {
+    background: white;
+    border-radius: 12px;
+    padding: 24px 32px;
+    margin-bottom: 32px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .toc h3 { color: var(--primary); margin-bottom: 16px; font-size: 16px; }
+  .toc-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+    list-style: none;
+  }
+  .toc-list a {
+    display: block;
+    padding: 8px 12px;
+    color: var(--gray-700);
+    text-decoration: none;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: all 0.15s;
+  }
+  .toc-list a:hover {
+    background: var(--gray-100);
+    color: var(--primary);
+    transform: translateX(4px);
+  }
+
+  /* Action box */
+  .action-box {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin: 20px 0;
+  }
+  .action-box h3 { font-size: 20px; margin-bottom: 16px; }
+  .action-list { list-style: none; }
+  .action-list li {
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .action-list li:last-child { border-bottom: none; }
+  .action-num {
+    background: white;
+    color: var(--success);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  footer {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--gray-500);
+    font-size: 13px;
+  }
+
+  @media (max-width: 768px) {
+    header.hero { padding: 40px 20px 60px; }
+    h1.hero-title { font-size: 28px; }
+    main { padding: 0 20px 40px; }
+    section { padding: 24px; }
+    .summary-grid { grid-template-columns: 1fr; }
+  }
+
+  @media print {
+    body { background: white; }
+    header.hero { background: var(--primary); }
+    section { box-shadow: none; border: 1px solid var(--gray-200); page-break-inside: avoid; }
+    .stage-card { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-content">
+    <div class="hero-badges">
+      <span class="badge accent">v3.0 RELEASE</span>
+      <span class="badge new">+ 分析層</span>
+      <span class="badge new">+ dbt</span>
+      <span class="badge new">+ Athena</span>
+      <span class="badge new">+ Power BI</span>
+      <span class="badge">Medallion Architecture</span>
+    </div>
+    <h1 class="hero-title">企業級全自動台股 AI 投資預警系統</h1>
+    <p class="hero-subtitle">
+      v3 整合 <strong>Modern Data Stack</strong>：Bronze/Silver/Gold 三層架構 + dbt 轉換層 + Power BI 視覺化儀表板
+    </p>
+    <div class="hero-meta">
+      <div class="meta-item">
+        <div class="meta-label">即時層</div>
+        <div class="meta-value">DynamoDB</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">分析層</div>
+        <div class="meta-value">Athena + dbt</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">視覺化</div>
+        <div class="meta-value">Power BI / Tableau</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">AI 引擎</div>
+        <div class="meta-value">Bedrock Claude 4.5</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">文件版本</div>
+        <div class="meta-value">2026-05-24</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- TOC -->
+<div class="toc">
+  <h3>📑 目錄導覽</h3>
+  <ul class="toc-list">
+    <li><a href="#exec-summary">① 執行摘要與 v2→v3 差異</a></li>
+    <li><a href="#architecture">② 整體架構藍圖 (v3)</a></li>
+    <li><a href="#storage-tiers">③ 三層儲存策略</a></li>
+    <li><a href="#stages">④ 五階段工作細節</a></li>
+    <li><a href="#analytics">⑤ 分析層：Medallion + dbt</a></li>
+    <li><a href="#bi">⑥ BI 整合：Power BI / Tableau</a></li>
+    <li><a href="#schemas">⑦ Schema 契約（含 Gold）</a></li>
+    <li><a href="#cost">⑧ 成本分析（更新版）</a></li>
+    <li><a href="#folder">⑨ 資料夾結構（含 dbt）</a></li>
+    <li><a href="#roadmap">⑩ 未來精進路線圖</a></li>
+    <li><a href="#positioning">⑪ 求職定位策略</a></li>
+    <li><a href="#action">⑫ 立即可執行的下一步</a></li>
+  </ul>
+</div>
+
+<!-- ===== Executive Summary ===== -->
+<section id="exec-summary">
+  <div class="section-title">
+    <span class="section-num">01</span>
+    <h2>執行摘要</h2>
+  </div>
+
+  <div class="summary-grid">
+    <div class="summary-text">
+      <p>
+        v3 在 v2 的 Serverless 基礎上，加入完整的 <strong>Modern Data Stack 分析層</strong>。
+        從原本「資料採集 → AI 摘要 → LINE 推播」的線性流程，
+        升級為「Hot Path（即時推播）+ Warm Path（SQL 分析 + 視覺化）」的**雙軌資料生命週期**。
+      </p>
+      <p>
+        新增的分析層採用 <strong>Medallion Architecture（Bronze / Silver / Gold 三層）</strong>，
+        透過 <strong>dbt</strong> 在 <strong>Amazon Athena</strong> 上做 SQL 轉換，
+        產出的 Gold Layer 直接供 <strong>Power BI / Tableau</strong> 連接建構互動式儀表板。
+      </p>
+      <p>
+        架構轉變後，本專案完整展示了 <strong>NoSQL + SQL 雙能力</strong>、
+        <strong>Lambda Architecture（Hot/Warm Path）</strong>、
+        <strong>Data Lakehouse</strong>、<strong>dbt 轉換</strong>、<strong>BI 整合</strong>等
+        企業級 Sr DE / Cloud Architect 全棧能力。
+      </p>
+    </div>
+
+    <div class="summary-stats">
+      <div class="stat-row">
+        <span class="stat-label">階段數量</span>
+        <span class="stat-value">6</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">AWS 服務數</span>
+        <span class="stat-value">15+</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">預估月成本</span>
+        <span class="stat-value">$56</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">資料分層</span>
+        <span class="stat-value">3 層</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Dashboard 數</span>
+        <span class="stat-value">4</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="changes-box">
+    <h4>🆕 v3 相對於 v2 的關鍵升級</h4>
+    <ul>
+      <li><strong>新增 Stage 6 分析層</strong>：Athena + Glue Catalog 提供 Serverless SQL 查詢能力</li>
+      <li><strong>導入 Medallion Architecture</strong>：明確 Bronze（raw）→ Silver（cleaned）→ Gold（marts）三層</li>
+      <li><strong>導入 dbt 轉換層</strong>：跨股票聚合、回測勝率、業務邏輯都用 SQL 寫，享有版本控制與測試</li>
+      <li><strong>新增 dbt 資料品質測試</strong>：not_null、relationships、自訂規則自動跑 CI/CD</li>
+      <li><strong>Power BI / Tableau 整合</strong>：透過 ODBC 連接 Athena，4 個核心 dashboard 規劃</li>
+      <li><strong>確認不加 RDBMS</strong>：BI 需求由 Athena 滿足，避免 RDS 維運成本與架構偏離</li>
+      <li><strong>專案資料夾新增 dbt/</strong>：完整 dbt project 結構</li>
+      <li><strong>Roadmap 重排</strong>：dbt + BI 從 Phase 2 提前到 Phase 1 必做</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ===== Architecture ===== -->
+<section id="architecture">
+  <div class="section-title">
+    <span class="section-num">02</span>
+    <h2>整體架構藍圖 v3</h2>
+  </div>
+  <p class="section-subtitle">完整資料生命週期：採集 → 清洗 → AI 分析 → 推播（Hot Path）+ SQL 轉換 → BI 視覺化（Warm Path）</p>
+
+  <div class="mermaid-container">
+    <div class="mermaid">
+flowchart TB
+    subgraph Sources["📡 資料源"]
+        TWSE[(TWSE OpenAPI)]
+        FM[(FinMind)]
+        YF[(yfinance)]
+    end
+
+    subgraph Trigger["⏰ 排程觸發"]
+        EB1[EventBridge 15:30<br/>ETL]
+        EB2[EventBridge 16:00<br/>dbt run]
+    end
+
+    subgraph Ingest["🔄 採集分派"]
+        DSP[Dispatcher Lambda]
+        SQS{{SQS + DLQ}}
+    end
+
+    subgraph ETL["⚙️ ETL 處理"]
+        W[Worker Lambda × N]
+    end
+
+    subgraph BronzeSilver["💾 儲存：Bronze + Silver"]
+        S3R[(S3 Bronze<br/>raw JSON)]
+        S3S[(S3 Silver<br/>Parquet)]
+        DDB[(DynamoDB<br/>Hot Path)]
+    end
+
+    subgraph AI["🧠 AI 分析"]
+        AN[Analyzer Lambda]
+        BR[Bedrock<br/>Claude 4.5 Haiku]
+    end
+
+    subgraph Push["📲 即時推播 Hot Path"]
+        SNS[SNS]
+        LINE[LINE Push API]
+    end
+
+    subgraph Query["🔍 即時查詢"]
+        APIGW[API Gateway]
+        QL[Query Lambda]
+    end
+
+    subgraph Analytics["📊 分析層 Warm Path ⭐ v3 新增"]
+        DBT[dbt run on Athena]
+        S3G[(S3 Gold<br/>marts Parquet)]
+        GLUE[Glue Catalog]
+        ATH[Amazon Athena]
+    end
+
+    subgraph BI["📈 BI 視覺化 ⭐ v3 新增"]
+        PBI[Power BI / Tableau]
+        DASH[互動式 Dashboard]
+    end
+
+    TWSE --> DSP
+    EB1 --> DSP
+    DSP --> SQS
+    SQS --> W
+    W --> S3R
+    W --> S3S
+    W --> DDB
+    DDB --> AN
+    AN --> BR
+    BR --> AN
+    AN --> DDB
+    AN --> SNS
+    SNS --> LINE
+    APIGW --> QL
+    QL --> DDB
+    QL --> LINE
+
+    S3S --> GLUE
+    S3G --> GLUE
+    EB2 --> DBT
+    DBT --> ATH
+    ATH --> S3S
+    DBT --> S3G
+    GLUE --> ATH
+    ATH -.ODBC.-> PBI
+    PBI --> DASH
+
+    classDef triggerStyle fill:#fef3c7,stroke:#f59e0b
+    classDef sourceStyle fill:#dbeafe,stroke:#3b82f6
+    classDef storageStyle fill:#d1fae5,stroke:#10b981
+    classDef aiStyle fill:#fce7f3,stroke:#ec4899
+    classDef analyticsStyle fill:#cffafe,stroke:#06b6d4,stroke-width:3px
+    classDef biStyle fill:#ede9fe,stroke:#8b5cf6,stroke-width:3px
+
+    class EB1,EB2 triggerStyle
+    class TWSE,FM,YF sourceStyle
+    class S3R,S3S,DDB,S3G storageStyle
+    class BR aiStyle
+    class DBT,ATH,GLUE analyticsStyle
+    class PBI,DASH biStyle
+    </div>
+  </div>
+  <div class="diagram-caption">圖 1：v3 完整架構 — 藍綠色為 v3 新增的分析與 BI 層</div>
+</section>
+
+<!-- ===== Storage Tiers ===== -->
+<section id="storage-tiers">
+  <div class="section-title">
+    <span class="section-num">03</span>
+    <h2>三層儲存策略（Hot / Warm / Cold）</h2>
+  </div>
+  <p class="section-subtitle">資料生命週期管理：不同存取模式對應不同服務，控制成本同時最大化分析能力</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>層級</th>
+        <th>服務</th>
+        <th>查詢延遲</th>
+        <th>適合場景</th>
+        <th>本專案用途</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="background:#fef2f2;">
+        <td>🔥 <strong>Hot</strong></td>
+        <td>DynamoDB</td>
+        <td>&lt; 10ms</td>
+        <td>即時點查、KV 存取</td>
+        <td>LINE Bot 即時查詢、訂閱管理、最新分析</td>
+      </tr>
+      <tr style="background:#cffafe;">
+        <td>🌤️ <strong>Warm</strong></td>
+        <td><strong>S3 Parquet + Athena</strong></td>
+        <td>1-10 秒</td>
+        <td>SQL 分析、跨表聚合</td>
+        <td>歷史回測、dbt 轉換、Power BI 接入</td>
+      </tr>
+      <tr style="background:#f3f4f6;">
+        <td>🧊 <strong>Cold</strong></td>
+        <td>S3 Glacier Deep Archive</td>
+        <td>數分鐘至 12 小時</td>
+        <td>歸檔保存</td>
+        <td>90 天以上原始資料、法遵保存</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="changes-box">
+    <h4>🎯 重要設計決策：為什麼不加 RDS？</h4>
+    <ul>
+      <li><strong>BI 需求由 Athena 滿足</strong>：Power BI 透過 ODBC 直連 Athena，不需要 RDS</li>
+      <li><strong>成本考量</strong>：Aurora Serverless v2 最低 ~$45/月 24 小時掛機；Athena 按掃描量 ~$0.15/月</li>
+      <li><strong>避免架構偏離</strong>：純 Serverless 設計，不引入需要 instance management 的元件</li>
+      <li><strong>未來保留彈性</strong>：若 Phase 2 整合 OpenMetadata 時再考慮加 Aurora 當其後端</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ===== Stages ===== -->
+<section id="stages">
+  <div class="section-title">
+    <span class="section-num">04</span>
+    <h2>五階段工作細節（v3 微調）</h2>
+  </div>
+  <p class="section-subtitle">階段一至五承襲 v2，主要在 Stage 2 強化「Bronze + Silver」雙寫入；Stage 6 為 v3 新增獨立章節</p>
+
+  <!-- Stage 1 -->
+  <div class="stage-card stage-1">
+    <div class="stage-header">
+      <span class="stage-num">01</span>
+      <div class="stage-title">
+        <h3>基礎設施與環境自動化 (IaC)</h3>
+        <div class="stage-goal">🎯 Terraform 定義所有雲端資源，含 v3 新增的 Athena Workgroup 與 Glue Database</div>
+      </div>
+    </div>
+    <div class="stage-body">
+      <div class="work-item">
+        <div class="work-item-title">Provider 與區域</div>
+        <p>AWS <code>ap-northeast-1</code>（東京），Terraform State 存 S3 + DynamoDB Lock。</p>
+      </div>
+      <div class="work-item">
+        <div class="work-item-title">IAM 最小權限</div>
+        <p>每個 Lambda 一個獨立 Role，dbt 執行 Role 額外授予 Athena Query + Glue 讀寫權限。</p>
+      </div>
+      <div class="work-item">
+        <div class="work-item-title">儲存層</div>
+        <p><strong>S3 三 bucket</strong>：<code>twstock-raw-prod</code>（Bronze）、<code>twstock-curated-prod</code>（Silver）、<code>twstock-marts-prod</code>（Gold）。各自獨立 Lifecycle 策略。</p>
+        <p><strong>DynamoDB</strong>：<code>StockAnalysisTable</code> + 兩個 GSI，On-Demand。</p>
+      </div>
+      <div class="work-item priority-new">
+        <div class="work-item-title">
+          Athena + Glue 配置
+          <span class="tag new">v3 新增</span>
+        </div>
+        <p><strong>Glue Database</strong>：<code>twstock_analytics</code>，含 Silver / Gold 兩個 schema。</p>
+        <p><strong>Glue Crawler</strong>：每日自動偵測 S3 新分區（partition）。</p>
+        <p><strong>Athena Workgroup</strong>：<code>twstock-analytics-wg</code>，設定查詢結果輸出位置與 query limit（防止意外掃描大量資料）。</p>
+      </div>
+      <div class="work-item">
+        <div class="work-item-title">Secrets / SQS / ECR</div>
+        <p>沿用 v2：Secrets Manager 存 LINE token、SQS Standard + DLQ、ECR 存 Docker image。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stage 2 -->
+  <div class="stage-card stage-2">
+    <div class="stage-header">
+      <span class="stage-num">02</span>
+      <div class="stage-title">
+        <h3>數據採集與 ETL（Bronze + Silver 雙寫）</h3>
+        <div class="stage-goal">🎯 Worker Lambda 同時寫入 Bronze（raw）與 Silver（cleaned），為 dbt 提供乾淨資料源</div>
+      </div>
+    </div>
+    <div class="stage-body">
+      <div class="work-item">
+        <div class="work-item-title">資料源 Strategy Pattern</div>
+        <p>TWSE OpenAPI 主源 → FinMind 備源 → yfinance 最終備援，自動 fallback。</p>
+      </div>
+      <div class="work-item priority-new">
+        <div class="work-item-title">
+          Bronze 寫入：原汁原味存底
+          <span class="tag new">v3 強化</span>
+        </div>
+        <p>原始 API JSON response 寫入 <code>s3://twstock-raw-prod/source=twse/year=2026/month=05/day=24/</code>，不做任何處理。用途：法遵、ETL 重跑、資料追溯。</p>
+      </div>
+      <div class="work-item priority-new">
+        <div class="work-item-title">
+          Silver 寫入：清洗 + 技術指標
+          <span class="tag new">v3 強化</span>
+        </div>
+        <p>清洗工作：型別轉換（string → float）、缺值處理、欄位命名標準化、計算 MA5/20/60、RSI、KD、MACD。</p>
+        <p>輸出至 <code>s3://twstock-curated-prod/stock_features/year=2026/month=05/day=24/features.parquet</code>，Snappy 壓縮。</p>
+      </div>
+      <div class="work-item">
+        <div class="work-item-title">DynamoDB 同步寫入</div>
+        <p>同樣資料寫入 DDB 給 Hot Path 使用，搭配 <code>attribute_not_exists</code> 條件式寫入確保冪等性。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stage 3 -->
+  <div class="stage-card stage-3">
+    <div class="stage-header">
+      <span class="stage-num">03</span>
+      <div class="stage-title">
+        <h3>AI 智能分析 (LLM Integration)</h3>
+        <div class="stage-goal">🎯 Bedrock Claude 4.5 Haiku 把技術指標翻譯成人類可讀摘要，含 Output Validator</div>
+      </div>
+    </div>
+    <div class="stage-body">
+      <div class="work-item">
+        <div class="work-item-title">模型：Claude 4.5 Haiku</div>
+        <p>低成本（$1/1M input tokens）、推理品質夠用、Bedrock <code>ap-northeast-1</code> 已上架。</p>
+      </div>
+      <div class="work-item">
+        <div class="work-item-title">Prompt + Grounding</div>
+        <p>System Prompt 設定為「資深量化分析師」，強制只使用輸入 JSON 中的數據，禁止推測未提供資訊。</p>
+      </div>
+      <div class="work-item">
+        <div class="work-item-title">Output Validator</div>
+        <p>Pydantic 驗證 Bedrock 回傳 JSON schema；<code>confidence &lt; 0.6</code> 時走 fallback 規則引擎。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stage 4 -->
+  <div class="stage-card stage-4">
+    <div class="stage-header">
+      <span class="stage-num">04</span>
+      <div class="stage-title">
+        <h3>自動化部署與監控 (DevOps)</h3>
+        <div class="stage-goal">🎯 GitHub Actions + CloudWatch + EventBridge 雙排程（ETL 15:30 + dbt 16:00）</div>
+      </div>
+    </div>
+    <div class="stage-body">
+      <div class="work-item">
+        <div class="work-item-title">CI/CD Pipeline</div>
+        <p>Push → Lint → Test → Docker Build → ECR → Terraform Plan → Approve → Apply。</p>
+      </div>
+      <div class="work-item priority-new">
+        <div class="work-item-title">
+          雙排程設計
+          <span class="tag new">v3 新增</span>
+        </div>
+        <p><strong>15:30</strong>：ETL Pipeline（Dispatcher → SQS → Worker → Bronze + Silver + DDB → Analyzer → LINE）。</p>
+        <p><strong>16:00</strong>：dbt run on Athena（Silver → Gold marts）。間隔 30 分鐘確保 ETL 完成。</p>
+      </div>
+      <div class="work-item">
+        <div class="work-item-title">三層告警</div>
+        <p>INFO（DLQ ≥ 5 → email）/ WARN（fallback 觸發 → LINE）/ CRIT（連續失敗 → SMS）。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stage 5 -->
+  <div class="stage-card stage-5">
+    <div class="stage-header">
+      <span class="stage-num">05</span>
+      <div class="stage-title">
+        <h3>前端互動 (LINE Bot)</h3>
+        <div class="stage-goal">🎯 雙向 LINE Bot：Push API 推播 + Webhook 查詢</div>
+      </div>
+    </div>
+    <div class="stage-body">
+      <div class="work-item">
+        <div class="work-item-title">推播</div>
+        <p>SNS → Lambda → LINE Messaging API（Flex Message 排版）。</p>
+      </div>
+      <div class="work-item">
+        <div class="work-item-title">API Gateway Webhook</div>
+        <p>使用者訊息 → API Gateway → Query Lambda（HMAC-SHA256 驗章 + DDB 查詢 + LINE Reply）。</p>
+      </div>
+      <div class="work-item">
+        <div class="work-item-title">查詢 Lambda Provisioned Concurrency</div>
+        <p>PC = 1，避免 cold start，回應時間 &lt; 500ms。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Analytics Layer ===== -->
+<section id="analytics">
+  <div class="section-title">
+    <span class="section-num">05</span>
+    <h2>Stage 6：分析層 — Medallion + dbt + Athena ⭐ v3 新增</h2>
+  </div>
+  <p class="section-subtitle">這個章節是 v3 的核心新增，包含 Bronze/Silver/Gold 分層、Athena 配置、dbt 專案設計三大內容</p>
+
+  <div class="stage-card stage-6">
+    <div class="stage-header">
+      <span class="stage-num">06</span>
+      <div class="stage-title">
+        <h3>分析層與資料治理</h3>
+        <div class="stage-goal">🎯 將 Silver 層資料透過 dbt 加工為 Gold marts，供 BI 工具與回測使用</div>
+      </div>
+    </div>
+    <div class="stage-body" style="padding: 0;">
+
+      <!-- 6.1 Medallion -->
+      <h3 class="sub-heading">6.1 Medallion Architecture（Bronze / Silver / Gold）</h3>
+      <div style="padding: 0 28px 16px;">
+        <p>採用 Databricks 提出、業界標準的三層 Data Lakehouse 設計：</p>
+
+        <div class="medallion-stack">
+          <div class="layer-card layer-bronze">
+            <div class="layer-header">
+              <span class="layer-icon">🥉</span>
+              <span class="layer-title">Bronze Layer — Raw Data</span>
+            </div>
+            <div class="layer-content">
+              <div class="layer-row"><span class="layer-key">內容</span><span>原始 API response，無任何處理</span></div>
+              <div class="layer-row"><span class="layer-key">格式</span><span>JSON</span></div>
+              <div class="layer-row"><span class="layer-key">位置</span><span>s3://twstock-raw-prod/</span></div>
+              <div class="layer-row"><span class="layer-key">用途</span><span>法遵、ETL 重跑、資料追溯</span></div>
+              <div class="layer-row"><span class="layer-key">寫入者</span><span>Worker Lambda（Stage 2）</span></div>
+            </div>
+          </div>
+
+          <div class="layer-arrow">↓ Worker Lambda 清洗、型別正規化、技術指標</div>
+
+          <div class="layer-card layer-silver">
+            <div class="layer-header">
+              <span class="layer-icon">🥈</span>
+              <span class="layer-title">Silver Layer — Cleaned / Conformed</span>
+            </div>
+            <div class="layer-content">
+              <div class="layer-row"><span class="layer-key">內容</span><span>型別正確、欄位統一、缺值處理、含技術指標</span></div>
+              <div class="layer-row"><span class="layer-key">格式</span><span>Parquet + Snappy 壓縮</span></div>
+              <div class="layer-row"><span class="layer-key">位置</span><span>s3://twstock-curated-prod/stock_features/</span></div>
+              <div class="layer-row"><span class="layer-key">用途</span><span>dbt 源資料、ML 訓練資料、Athena 大部分查詢</span></div>
+              <div class="layer-row"><span class="layer-key">寫入者</span><span>Worker Lambda（Stage 2）</span></div>
+            </div>
+          </div>
+
+          <div class="layer-arrow">↓ dbt 跨表 JOIN、聚合、業務邏輯</div>
+
+          <div class="layer-card layer-gold">
+            <div class="layer-header">
+              <span class="layer-icon">🥇</span>
+              <span class="layer-title">Gold Layer — Business Marts</span>
+            </div>
+            <div class="layer-content">
+              <div class="layer-row"><span class="layer-key">內容</span><span>為「特定分析問題」量身打造的表，含聚合與業務指標</span></div>
+              <div class="layer-row"><span class="layer-key">格式</span><span>Parquet（dbt 產出）</span></div>
+              <div class="layer-row"><span class="layer-key">位置</span><span>s3://twstock-marts-prod/</span></div>
+              <div class="layer-row"><span class="layer-key">用途</span><span>BI 工具直接讀、Dashboard、報表</span></div>
+              <div class="layer-row"><span class="layer-key">寫入者</span><span>dbt run（每日 16:00 觸發）</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6.2 Athena -->
+      <h3 class="sub-heading">6.2 Athena 配置</h3>
+      <div style="padding: 0 28px 16px;">
+        <p>Athena 是 <strong>Serverless SQL Query Engine</strong>（底層 Presto），對 S3 上的資料執行 ANSI SQL，不儲存資料。</p>
+
+        <h4 class="sub-sub">Glue Catalog 設定</h4>
+        <table>
+          <thead>
+            <tr><th>Database</th><th>Tables</th><th>用途</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>twstock_silver</code></td>
+              <td><code>stock_features</code>, <code>foreign_trades</code></td>
+              <td>對接 S3 Silver Parquet</td>
+            </tr>
+            <tr>
+              <td><code>twstock_gold</code></td>
+              <td><code>fct_daily_signals</code>, <code>fct_backtest_returns</code>, <code>dim_stocks</code>, <code>mart_dashboard</code></td>
+              <td>對接 S3 Gold marts（dbt 產出）</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4 class="sub-sub">Athena 查詢範例（直接寫 SQL！）</h4>
+        <div class="code-label">SQL on Athena</div>
+        <div class="code-block"><span class="comment">-- 回測：過去一年 RSI &lt; 30 進場、5 日後的勝率</span>
+<span class="keyword">WITH</span> signals <span class="keyword">AS</span> (
+  <span class="keyword">SELECT</span>
+    stock_id, trade_date,
+    close <span class="keyword">AS</span> entry_price,
+    <span class="func">LEAD</span>(close, <span class="number">5</span>) <span class="keyword">OVER</span> (<span class="keyword">PARTITION BY</span> stock_id <span class="keyword">ORDER BY</span> trade_date) <span class="keyword">AS</span> exit_5d
+  <span class="keyword">FROM</span> twstock_silver.stock_features
+  <span class="keyword">WHERE</span> rsi_14 &lt; <span class="number">30</span> <span class="keyword">AND</span> trade_date &gt;= <span class="number">20250524</span>
+)
+<span class="keyword">SELECT</span>
+  <span class="func">COUNT</span>(*) <span class="keyword">AS</span> signal_count,
+  <span class="func">SUM</span>(<span class="keyword">CASE WHEN</span> exit_5d &gt; entry_price <span class="keyword">THEN</span> <span class="number">1</span> <span class="keyword">ELSE</span> <span class="number">0</span> <span class="keyword">END</span>) <span class="keyword">AS</span> wins,
+  <span class="func">AVG</span>((exit_5d - entry_price) / entry_price * <span class="number">100</span>) <span class="keyword">AS</span> avg_return_pct
+<span class="keyword">FROM</span> signals
+<span class="keyword">WHERE</span> exit_5d <span class="keyword">IS NOT NULL</span>;</div>
+      </div>
+
+      <!-- 6.3 dbt -->
+      <h3 class="sub-heading">6.3 dbt 專案設計</h3>
+      <div style="padding: 0 28px 16px;">
+        <p>dbt（data build tool）是 SQL-based 的 transformation 框架，支援版本控制、測試、文件、依賴管理。</p>
+
+        <h4 class="sub-sub">專案結構</h4>
+        <div class="code-block">tw_stock_bot/dbt/
+├── models/
+│   ├── staging/                        <span class="comment"># 從 Silver 對接的入口</span>
+│   │   ├── stg_stock_prices.sql
+│   │   ├── stg_foreign_trades.sql
+│   │   └── _stg_schema.yml             <span class="comment"># 欄位定義 + 測試</span>
+│   ├── intermediate/                   <span class="comment"># 中介計算表</span>
+│   │   ├── int_daily_signals.sql
+│   │   └── int_signal_returns.sql
+│   └── marts/                          <span class="comment"># 🥇 Gold Layer 最終產出</span>
+│       ├── fct_daily_signals.sql       <span class="comment"># 今日所有訊號彙總</span>
+│       ├── fct_backtest_returns.sql    <span class="comment"># 訊號歷史勝率</span>
+│       ├── dim_stocks.sql              <span class="comment"># 股票主檔含產業</span>
+│       └── _marts_schema.yml
+├── tests/                              <span class="comment"># 自訂資料品質測試</span>
+├── macros/                             <span class="comment"># 可重用 SQL 函式</span>
+├── dbt_project.yml
+└── profiles.yml                        <span class="comment"># Athena 連線設定</span></div>
+
+        <h4 class="sub-sub">dbt model 範例（Gold Layer）</h4>
+        <div class="code-label">models/marts/fct_backtest_returns.sql</div>
+        <div class="code-block">{{ config(
+    materialized=<span class="string">'table'</span>,
+    partitioned_by=[<span class="string">'signal_type'</span>],
+    external_location=<span class="string">'s3://twstock-marts-prod/fct_backtest_returns/'</span>
+) }}
+
+<span class="keyword">WITH</span> signal_events <span class="keyword">AS</span> (
+  <span class="keyword">SELECT</span>
+    stock_id, trade_date, signal_type,
+    close_price <span class="keyword">AS</span> entry_price,
+    <span class="func">LEAD</span>(close_price, <span class="number">5</span>) <span class="keyword">OVER</span> (
+      <span class="keyword">PARTITION BY</span> stock_id <span class="keyword">ORDER BY</span> trade_date
+    ) <span class="keyword">AS</span> exit_price_5d
+  <span class="keyword">FROM</span> {{ ref(<span class="string">'int_daily_signals'</span>) }}
+  <span class="keyword">WHERE</span> signal_type <span class="keyword">IS NOT NULL</span>
+)
+<span class="keyword">SELECT</span>
+  signal_type,
+  <span class="func">COUNT</span>(*) <span class="keyword">AS</span> total_events,
+  <span class="func">SUM</span>(<span class="keyword">CASE WHEN</span> exit_price_5d &gt; entry_price <span class="keyword">THEN</span> <span class="number">1</span> <span class="keyword">ELSE</span> <span class="number">0</span> <span class="keyword">END</span>) <span class="keyword">AS</span> wins,
+  <span class="func">ROUND</span>(<span class="func">AVG</span>((exit_price_5d - entry_price) / entry_price * <span class="number">100</span>), <span class="number">2</span>) <span class="keyword">AS</span> avg_return_pct
+<span class="keyword">FROM</span> signal_events
+<span class="keyword">WHERE</span> exit_price_5d <span class="keyword">IS NOT NULL</span>
+<span class="keyword">GROUP BY</span> signal_type</div>
+
+        <h4 class="sub-sub">dbt 資料品質測試</h4>
+        <div class="code-label">models/staging/_stg_schema.yml</div>
+        <div class="code-block">version: <span class="number">2</span>
+
+models:
+  - name: stg_stock_prices
+    columns:
+      - name: stock_id
+        tests:
+          - not_null              <span class="comment"># ❗ 不允許 NULL</span>
+          - relationships:        <span class="comment"># ❗ 必須存在於 dim_stocks</span>
+              to: ref(<span class="string">'dim_stocks'</span>)
+              field: stock_id
+
+      - name: close_price
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: <span class="string">"&gt; 0"</span>   <span class="comment"># ❗ 收盤價必須 &gt; 0</span>
+
+      - name: rsi_14
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: <span class="string">"&gt;= 0 AND &lt;= 100"</span>  <span class="comment"># ❗ RSI 必須 0-100</span>
+
+      - name: trade_date
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: <span class="string">"&lt;= CURRENT_DATE"</span>   <span class="comment"># ❗ 不能是未來</span></div>
+
+        <p style="margin-top: 12px;"><strong>每次 <code>dbt test</code> 都會跑這些檢查</strong>，資料異常時 CI/CD pipeline 直接 fail，不會把髒資料推給下游。</p>
+
+        <h4 class="sub-sub">dbt 三層職責分工</h4>
+        <table>
+          <thead>
+            <tr><th>層級</th><th>工具</th><th>處理範圍</th><th>跑頻率</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>🥉 Bronze → 🥈 Silver</td>
+              <td><strong>Python (Lambda)</strong></td>
+              <td><strong>單筆</strong>清洗（API call、技術指標公式）</td>
+              <td>每筆觸發</td>
+            </tr>
+            <tr>
+              <td>🥈 Silver → 🥇 Gold</td>
+              <td><strong>dbt (Athena)</strong></td>
+              <td><strong>跨筆</strong>聚合、JOIN、業務指標</td>
+              <td>每日 1 次</td>
+            </tr>
+            <tr>
+              <td>🥇 Gold → 消費端</td>
+              <td>BI / API</td>
+              <td>讀取</td>
+              <td>隨時</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== BI Integration ===== -->
+<section id="bi">
+  <div class="section-title">
+    <span class="section-num">06</span>
+    <h2>BI 視覺化整合：Power BI / Tableau ⭐ v3 新增</h2>
+  </div>
+  <p class="section-subtitle">透過 ODBC 連接 Athena，零搬遷成本接入 BI 工具，產出 4 個核心 dashboard</p>
+
+  <h3 class="sub-heading">連接架構</h3>
+  <div class="mermaid-container">
+    <div class="mermaid">
+flowchart LR
+    S3[S3 Gold Parquet<br/>dbt 產出]
+    GLUE[Glue Catalog<br/>Schema]
+    ATH[Amazon Athena<br/>SQL Engine]
+    ODBC[ODBC Connector]
+    BI[Power BI / Tableau]
+    DASH[📊 Dashboard]
+
+    S3 --> GLUE
+    GLUE --> ATH
+    ATH -.JDBC/ODBC.-> ODBC
+    ODBC --> BI
+    BI --> DASH
+
+    style ATH fill:#cffafe,stroke:#06b6d4
+    style BI fill:#ede9fe,stroke:#8b5cf6,stroke-width:3px
+    </div>
+  </div>
+
+  <h3 class="sub-heading">BI 工具選型</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>工具</th>
+        <th>月費（個人）</th>
+        <th>學習曲線</th>
+        <th>本專案推薦度</th>
+        <th>備註</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="background:#f0fdf4;">
+        <td><strong>Tableau Public</strong> ⭐</td>
+        <td>$0</td>
+        <td>中</td>
+        <td>★★★★★</td>
+        <td>使用者已有 Tableau 經驗（含 TDS 排錯）；可公開發布作品集</td>
+      </tr>
+      <tr>
+        <td>Power BI Desktop</td>
+        <td>$0</td>
+        <td>低</td>
+        <td>★★★★☆</td>
+        <td>免費、企業最廣泛使用、本機分析夠用</td>
+      </tr>
+      <tr>
+        <td>Power BI Pro</td>
+        <td>$10</td>
+        <td>低</td>
+        <td>★★★★☆</td>
+        <td>可分享 Dashboard 給朋友</td>
+      </tr>
+      <tr>
+        <td>AWS QuickSight</td>
+        <td>$24</td>
+        <td>中</td>
+        <td>★★★☆☆</td>
+        <td>AWS 原生整合最順，但學習價值較低</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub-heading">Import vs DirectQuery 模式</h3>
+  <table>
+    <thead>
+      <tr><th>模式</th><th>運作方式</th><th>本專案適用度</th><th>成本影響</th></tr>
+    </thead>
+    <tbody>
+      <tr style="background:#f0fdf4;">
+        <td><strong>Import</strong> ⭐</td>
+        <td>把資料拉到 Power BI 本機/Cloud，定時 refresh</td>
+        <td>★★★★★（本專案首選）</td>
+        <td>每月 ~$0.15 Athena 費用</td>
+      </tr>
+      <tr>
+        <td>DirectQuery</td>
+        <td>每次互動都即時查 Athena</td>
+        <td>★★☆☆☆</td>
+        <td>每次操作都付費，可能 $5-20+/月</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub-heading">四個核心 Dashboard 規劃</h3>
+
+  <h4 class="sub-sub">Dashboard 1: 📈 每日盤勢總覽</h4>
+  <div class="dashboard-mock">┌─────────────────────────────────────────────────┐
+│  今日台股 Dashboard      2026-05-24             │
+├─────────────────────────────────────────────────┤
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐         │
+│  │ 加權指數 │  │ 觸發訊號 │  │ 訊號比例 │         │
+│  │ 24,500  │  │   18 檔  │  │   1.0%  │         │
+│  └─────────┘  └─────────┘  └─────────┘         │
+│                                                 │
+│  [產業別漲跌熱力圖]      [訊號類型分布甜甜圈]    │
+│                                                 │
+│  [今日觸發訊號 Top 10 表格 + AI 摘要連結]       │
+└─────────────────────────────────────────────────┘</div>
+
+  <h4 class="sub-sub">Dashboard 2: 🎯 訊號回測勝率分析</h4>
+  <div class="dashboard-mock">┌─────────────────────────────────────────────────┐
+│  訊號回測 (過去 1 年)                            │
+├─────────────────────────────────────────────────┤
+│  訊號類型 | 觸發次數 | 5日勝率 | 平均報酬       │
+│  ─────────────────────────────────────────       │
+│  OVERSOLD |   320   |  62%    |  +2.3%         │
+│  BREAKOUT |   180   |  58%    |  +3.1%         │
+│  OVERBUY  |    95   |  45%    |  -1.2%         │
+│                                                 │
+│  [勝率時間趨勢線]   [各產業訊號有效性對比]      │
+└─────────────────────────────────────────────────┘</div>
+
+  <h4 class="sub-sub">Dashboard 3: 💼 個股深度分析（互動式）</h4>
+  <div class="dashboard-mock">┌─────────────────────────────────────────────────┐
+│  個股探索  選擇：[2330 ▼]                       │
+├─────────────────────────────────────────────────┤
+│  [股價蠟燭圖 + MA5/20/60 疊圖]                  │
+│  [外資/投信/自營商買賣超柱狀圖]                  │
+│  [RSI 走勢線 + 超買/超賣區帶]                   │
+│  [歷史 AI 訊號標記 + 後續走勢]                  │
+└─────────────────────────────────────────────────┘</div>
+
+  <h4 class="sub-sub">Dashboard 4: 🖥️ 系統健康度（運維 Dashboard）</h4>
+  <div class="dashboard-mock">┌─────────────────────────────────────────────────┐
+│  System Health                                   │
+├─────────────────────────────────────────────────┤
+│  [Lambda 成功率時間線]                          │
+│  [Bedrock API 用量 + 月成本估算]                │
+│  [DLQ 訊息累積數]                               │
+│  [資料源 fallback 觸發次數]                     │
+└─────────────────────────────────────────────────┘</div>
+
+  <p style="margin-top: 16px; padding: 16px; background: #fef3c7; border-radius: 8px; border-left: 4px solid var(--warning);">
+    <strong>💡 面試殺手鐧</strong>：Dashboard 4 證明你會「做出有 SLO 意識的系統」，這是 SRE / Cloud Architect 加分項。
+  </p>
+</section>
+
+<!-- ===== Schema Contracts ===== -->
+<section id="schemas">
+  <div class="section-title">
+    <span class="section-num">07</span>
+    <h2>Schema 契約（含 Gold Layer）</h2>
+  </div>
+
+  <h3 class="sub-heading">🥈 Silver: StockFeature</h3>
+  <div class="code-block"><span class="comment"># Worker Lambda 寫入，dbt staging 讀取</span>
+<span class="keyword">class</span> StockFeature(BaseModel):
+    StockID:       <span class="type">str</span>      <span class="comment"># "2330"</span>
+    TradeDate:     <span class="type">int</span>      <span class="comment"># 20260524</span>
+    Open:          <span class="type">float</span>
+    High:          <span class="type">float</span>
+    Low:           <span class="type">float</span>
+    Close:         <span class="type">float</span>
+    Volume:        <span class="type">int</span>
+    ForeignNetBuy: <span class="type">int</span>      <span class="comment"># 外資買賣超</span>
+    TrustNetBuy:   <span class="type">int</span>
+    DealerNetBuy:  <span class="type">int</span>
+    PE:            <span class="type">float</span>
+    PB:            <span class="type">float</span>
+    MA5:           <span class="type">float</span>
+    MA20:          <span class="type">float</span>
+    MA60:          <span class="type">float</span>
+    RSI14:         <span class="type">float</span>
+    Source:        <span class="type">str</span>      <span class="comment"># "TWSE" | "FinMind" | "yfinance"</span>
+    IngestedAt:    <span class="type">str</span>      <span class="comment"># ISO8601</span></div>
+
+  <h3 class="sub-heading">🧠 AI 分析：AIAnalysisResult</h3>
+  <div class="code-block"><span class="keyword">class</span> AIAnalysisResult(BaseModel):
+    StockID:      <span class="type">str</span>
+    TradeDate:    <span class="type">int</span>
+    Signal:       Literal[<span class="string">"OVERSOLD"</span>, <span class="string">"OVERBOUGHT"</span>, <span class="string">"NEUTRAL"</span>, <span class="string">"BREAKOUT"</span>]
+    Confidence:   <span class="type">float</span>    <span class="comment"># 0~1, &lt;0.6 觸發 fallback</span>
+    Summary:      <span class="type">str</span>      <span class="comment"># max 100 字</span>
+    KeyMetrics:   <span class="type">dict</span>
+    GeneratedBy:  <span class="type">str</span>      <span class="comment"># "bedrock" | "rule-engine-fallback"</span>
+    ModelVersion: <span class="type">str</span>
+    GeneratedAt:  <span class="type">str</span></div>
+
+  <h3 class="sub-heading">🥇 Gold: fct_daily_signals（dbt 產出）</h3>
+  <div class="code-block"><span class="comment"># 每日所有觸發訊號的聚合表，BI Dashboard 主資料源</span>
+fct_daily_signals:
+  trade_date:       <span class="type">int</span>      <span class="comment"># Partition Key</span>
+  stock_id:         <span class="type">str</span>
+  stock_name:       <span class="type">str</span>      <span class="comment"># JOIN dim_stocks</span>
+  industry:         <span class="type">str</span>
+  signal_type:      <span class="type">str</span>      <span class="comment"># OVERSOLD/BREAKOUT/...</span>
+  close_price:      <span class="type">float</span>
+  pct_change:       <span class="type">float</span>
+  rsi_14:           <span class="type">float</span>
+  foreign_net_buy:  <span class="type">int</span>
+  ai_summary:       <span class="type">str</span>
+  confidence:       <span class="type">float</span></div>
+
+  <h3 class="sub-heading">🥇 Gold: fct_backtest_returns（dbt 產出）</h3>
+  <div class="code-block"><span class="comment"># 訊號歷史勝率，回測 Dashboard 主資料源</span>
+fct_backtest_returns:
+  signal_type:        <span class="type">str</span>     <span class="comment"># Partition Key</span>
+  total_events:       <span class="type">int</span>
+  wins:               <span class="type">int</span>
+  losses:             <span class="type">int</span>
+  win_rate_pct:       <span class="type">float</span>
+  avg_return_pct:     <span class="type">float</span>
+  max_return_pct:     <span class="type">float</span>
+  min_return_pct:     <span class="type">float</span>
+  calculation_date:   <span class="type">date</span></div>
+
+  <h3 class="sub-heading">🥇 Gold: dim_stocks（dbt 產出）</h3>
+  <div class="code-block"><span class="comment"># 股票主檔含產業分類，所有 fact 表 JOIN 用</span>
+dim_stocks:
+  stock_id:          <span class="type">str</span>     <span class="comment"># PK</span>
+  stock_name:        <span class="type">str</span>
+  industry:          <span class="type">str</span>     <span class="comment"># 半導體業/電子業/金融業...</span>
+  listing_date:      <span class="type">date</span>
+  market:            <span class="type">str</span>     <span class="comment"># 上市/上櫃</span>
+  is_etf:            <span class="type">bool</span>
+  updated_at:        <span class="type">timestamp</span></div>
+</section>
+
+<!-- ===== Cost Analysis ===== -->
+<section id="cost">
+  <div class="section-title">
+    <span class="section-num">08</span>
+    <h2>成本分析（v3 更新）</h2>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>服務</th><th>用量假設</th><th>月成本</th><th>備註</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Lambda（Worker + Analyzer）</td><td>1000 invokes/day × 30s × 512MB, ARM</td><td>$0.50</td><td></td></tr>
+      <tr><td>Lambda（Query, PC=1）</td><td>1 instance × 24h × 30d</td><td>$3.00</td><td></td></tr>
+      <tr><td>Bedrock Claude 4.5 Haiku</td><td>1000 calls/day, ~700 tokens</td><td>$45.00</td><td>主要成本來源</td></tr>
+      <tr><td>DynamoDB On-Demand</td><td>~50K WCU + 100K RCU/月</td><td>$2.50</td><td></td></tr>
+      <tr><td>S3 全部（Bronze + Silver + Gold + Glacier）</td><td>~3 GB</td><td>$0.10</td><td>含 Lifecycle</td></tr>
+      <tr><td>SQS + DLQ</td><td>~30K messages/月</td><td>$0.01</td><td></td></tr>
+      <tr><td>API Gateway</td><td>~3000 requests/月</td><td>$0.01</td><td></td></tr>
+      <tr><td>CloudWatch Logs + X-Ray</td><td>~1GB/月</td><td>$2.00</td><td></td></tr>
+      <tr><td>Secrets Manager</td><td>3 secrets</td><td>$1.20</td><td></td></tr>
+      <tr style="background:#cffafe;"><td><strong>Athena</strong> ⭐ v3 新增</td><td>~30 queries/月 × ~200KB scan</td><td><strong>$0.15</strong></td><td>dbt + BI refresh</td></tr>
+      <tr style="background:#cffafe;"><td><strong>Glue Crawler</strong> ⭐ v3 新增</td><td>每日 1 次, ~1 min</td><td><strong>$0.30</strong></td><td>自動 schema 偵測</td></tr>
+      <tr style="background:#cffafe;"><td><strong>Power BI Desktop</strong> 或 Tableau Public ⭐</td><td>個人使用</td><td><strong>$0</strong></td><td>完全免費</td></tr>
+      <tr style="background:var(--gray-100); font-weight:700;">
+        <td colspan="2">合計</td>
+        <td>≈ $54.77/月</td>
+        <td>v2 → v3 僅增加 $0.45</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="changes-box">
+    <h4>💡 成本效益分析</h4>
+    <ul>
+      <li>v3 新增分析層只增加 ~$0.45/月（Athena + Glue Crawler）</li>
+      <li>使用 Tableau Public 或 Power BI Desktop：BI 工具成本為 $0</li>
+      <li>避免加 RDS：節省至少 $13-45/月</li>
+      <li>整體月成本控制在 $55 內，符合 Side Project 預算</li>
+      <li><strong>真正瓶頸仍是 Bedrock API（佔總成本 82%）</strong>，未來優化重點</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ===== Folder Structure ===== -->
+<section id="folder">
+  <div class="section-title">
+    <span class="section-num">09</span>
+    <h2>專案資料夾結構（v3 含 dbt）</h2>
+  </div>
+
+  <div class="code-block">tw_stock_bot/
+├── docs/
+│   ├── planning/        規劃書 v1, v2, v3
+│   ├── architecture/    架構圖、ADR
+│   └── runbook/         維運手冊
+├── infra/
+│   ├── modules/         Terraform 可重用模組（含 athena, glue）
+│   └── environments/    dev / staging / prod 環境配置
+├── src/
+│   ├── dispatcher/      Stage 2 入口 Lambda
+│   ├── worker/          Stage 2 ETL Lambda（Bronze + Silver 雙寫）
+│   ├── analyzer/        Stage 3 AI 分析 Lambda
+│   └── query/           Stage 5 LINE Webhook Lambda
+├── dbt/                 <span class="comment">⭐ v3 新增</span>
+│   ├── models/
+│   │   ├── staging/     從 Silver 對接
+│   │   ├── intermediate/
+│   │   └── marts/       🥇 Gold Layer 產出
+│   ├── tests/           自訂資料品質測試
+│   ├── macros/          可重用 SQL 函式
+│   ├── dbt_project.yml
+│   └── profiles.yml     Athena 連線設定
+├── bi/                  <span class="comment">⭐ v3 新增</span>
+│   ├── powerbi/         .pbix 檔（Power BI 報表）
+│   └── tableau/         .twb / .twbx 檔（Tableau 報表）
+├── tests/               單元測試 + 整合測試
+├── scripts/             一次性腳本
+├── .github/workflows/   CI/CD pipeline
+├── .gitignore
+└── README.md</div>
+</section>
+
+<!-- ===== Roadmap ===== -->
+<section id="roadmap">
+  <div class="section-title">
+    <span class="section-num">10</span>
+    <h2>未來精進路線圖（v3 重排）</h2>
+  </div>
+  <p class="section-subtitle">dbt + BI 從 Phase 2 提前到 Phase 1 必做項目</p>
+
+  <div class="roadmap-wave wave-1">
+    <div class="wave-header">
+      <span class="wave-medal">🥇</span>
+      <span class="wave-title">第一波：3 個月內（MVP）</span>
+      <span class="wave-timeframe">2026 Q3</span>
+    </div>
+    <div class="roadmap-item">
+      <h5>① 階段一到五 IaC + ETL + AI + DevOps + LINE Bot</h5>
+      <p>v2 規劃的五個階段全部完成，Hot Path 跑通。</p>
+    </div>
+    <div class="roadmap-item">
+      <h5>② Stage 6 分析層 ⭐ v3 提前</h5>
+      <p>Medallion Architecture + dbt + Athena 完整跑通。產出 Gold marts。</p>
+    </div>
+    <div class="roadmap-item">
+      <h5>③ Power BI / Tableau Dashboard ⭐ v3 提前</h5>
+      <p>四個核心 Dashboard 完成，截圖放進 GitHub README 與履歷。</p>
+    </div>
+  </div>
+
+  <div class="roadmap-wave wave-2">
+    <div class="wave-header">
+      <span class="wave-medal">🥈</span>
+      <span class="wave-title">第二波：6 個月內（差異化）</span>
+      <span class="wave-timeframe">2026 Q4 - 2027 Q1</span>
+    </div>
+    <div class="roadmap-item">
+      <h5>④ 新聞情緒分析 RAG 模組</h5>
+      <p>firecrawl 爬鉅亨網/MoneyDJ → Bedrock Titan Embeddings → S3 Vectors → 分析時 RAG 拉取注入 prompt。</p>
+    </div>
+    <div class="roadmap-item">
+      <h5>⑤ OpenMetadata 資料治理整合</h5>
+      <p>登錄所有資料源、transformation、輸出，產生完整 Lineage 圖。</p>
+    </div>
+    <div class="roadmap-item">
+      <h5>⑥ 英文文件三件套</h5>
+      <p>README + RUNBOOK + COST_ANALYSIS 英文版，新加坡職位申請武器。</p>
+    </div>
+  </div>
+
+  <div class="roadmap-wave wave-3">
+    <div class="wave-header">
+      <span class="wave-medal">🥉</span>
+      <span class="wave-title">第三波：長期願景</span>
+      <span class="wave-timeframe">2027+</span>
+    </div>
+    <div class="roadmap-item">
+      <h5>⑦ Multi-Agent 協作架構</h5>
+      <p>Technical / Sentiment / Risk Agent + Coordinator，LangGraph 或 Bedrock Agents。</p>
+    </div>
+    <div class="roadmap-item">
+      <h5>⑧ ML 評分層替代規則引擎</h5>
+      <p>SageMaker + XGBoost 做多因子打分模型。</p>
+    </div>
+    <div class="roadmap-item">
+      <h5>⑨ 跨資產延伸 + 多區域 DR</h5>
+      <p>美股 / 加密貨幣擴充；ap-southeast-1（新加坡）作為災難復原區。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Positioning ===== -->
+<section id="positioning">
+  <div class="section-title">
+    <span class="section-num">11</span>
+    <h2>求職定位策略（v3 強化版）</h2>
+  </div>
+  <p class="section-subtitle">v3 加入 SQL + dbt + BI 後，敘事更完整有力</p>
+
+  <div class="positioning-grid">
+
+    <div class="pos-card csa">
+      <h4>🏛️ 雲端架構師 (CSA)</h4>
+      <div class="pos-tagline">強調系統設計與成本治理能力</div>
+      <table>
+        <thead>
+          <tr><th>展示點</th><th>對應能力</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Terraform 全資源 IaC</td><td>環境治理</td></tr>
+          <tr><td>三層儲存（Hot/Warm/Cold）</td><td>Lambda Architecture</td></tr>
+          <tr><td>EventBridge + SQS + DDB Streams</td><td>分散式系統</td></tr>
+          <tr><td>不加 RDS、用 Athena 解 BI</td><td>避免架構偏離的判斷力</td></tr>
+          <tr><td>LLM Grounding + Validator</td><td>AI 落地實戰</td></tr>
+        </tbody>
+      </table>
+      <div class="interview-quote">
+        我刻意不加 RDS — Power BI 真正需要的是 SQL endpoint，Athena 完美提供。同時用 dbt 在 Athena 上做 transformation，享有版本控制、測試、文件三大紅利，整套無維運成本。
+      </div>
+    </div>
+
+    <div class="pos-card de">
+      <h4>🔧 資深資料工程師 (Sr DE) ⭐</h4>
+      <div class="pos-tagline">v3 升級後最有力的職位定位</div>
+      <table>
+        <thead>
+          <tr><th>展示點</th><th>對應能力</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Medallion Architecture</strong></td><td>Modern Data Stack</td></tr>
+          <tr><td><strong>dbt 模型 + 資料品質測試</strong></td><td>SQL 轉換工程</td></tr>
+          <tr><td><strong>Athena + Glue Catalog</strong></td><td>Data Lakehouse</td></tr>
+          <tr><td><strong>NoSQL + SQL 雙能力</strong></td><td>Polyglot Persistence</td></tr>
+          <tr><td><strong>Power BI / Tableau 整合</strong></td><td>End-to-end Pipeline</td></tr>
+        </tbody>
+      </table>
+      <div class="interview-quote">
+        我採用 Medallion Architecture — Python Lambda 做單筆清洗（Bronze→Silver），dbt 做跨筆聚合（Silver→Gold）。資料品質檢查內建於 CI/CD，異常時 build 直接 fail。BI 工具直連 Athena 讀 Gold layer，完整展示 NoSQL + SQL + dbt + BI 全棧能力。
+      </div>
+    </div>
+
+    <div class="pos-card sg">
+      <h4>🌏 新加坡遠端職位</h4>
+      <div class="pos-tagline">英文文件 + Public Dashboard 雙武器</div>
+      <table>
+        <thead>
+          <tr><th>必備武器</th><th>說明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>英文 README/RUNBOOK</td><td>專案入口 + 維運手冊</td></tr>
+          <tr><td><strong>Tableau Public Dashboard</strong></td><td>可公開分享的視覺化作品</td></tr>
+          <tr><td>COST_ANALYSIS.md</td><td>成本透明度 + 容量規劃</td></tr>
+          <tr><td>架構決策紀錄 (ADR)</td><td>每個重大決策的 trade-off</td></tr>
+        </tbody>
+      </table>
+      <div class="interview-quote">
+        I designed a Lakehouse with three tiers: DynamoDB for hot path, S3 + Athena for warm analytical queries via dbt, and Glacier for cold archive. The public Tableau dashboard is at [link] — you can interact with real backtest results computed by dbt.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Action ===== -->
+<section id="action">
+  <div class="section-title">
+    <span class="section-num">12</span>
+    <h2>立即可執行的下一步</h2>
+  </div>
+
+  <div class="action-box">
+    <h3>🚀 v3 規劃書定稿後，12 週實作計畫</h3>
+    <ul class="action-list">
+      <li>
+        <span class="action-num">1</span>
+        <div>
+          <strong>Week 1-2：階段一 IaC 全部完成</strong><br>
+          <span style="opacity:0.9;font-size:14px;">Terraform 含 Athena Workgroup、Glue Database、3 個 S3 bucket。</span>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">2</span>
+        <div>
+          <strong>Week 3-4：階段二 ETL（Bronze + Silver 雙寫）</strong><br>
+          <span style="opacity:0.9;font-size:14px;">Worker Lambda 寫 raw JSON + Parquet + DDB；Strategy Pattern 完成。</span>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">3</span>
+        <div>
+          <strong>Week 5：階段三 Bedrock + Output Validator</strong><br>
+          <span style="opacity:0.9;font-size:14px;">5 支股票 PoC → 跑通 → 放大全市場。</span>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">4</span>
+        <div>
+          <strong>Week 6：階段四 監控告警</strong><br>
+          <span style="opacity:0.9;font-size:14px;">CloudWatch Dashboard + 三層告警。</span>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">5</span>
+        <div>
+          <strong>Week 7-8：階段五 LINE Bot 雙向互動</strong><br>
+          <span style="opacity:0.9;font-size:14px;">Push API + Webhook + HMAC 驗章。</span>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">6</span>
+        <div>
+          <strong>Week 9-10：階段六 dbt + Athena ⭐ v3 新增</strong><br>
+          <span style="opacity:0.9;font-size:14px;">dbt 專案結構 → staging/intermediate/marts → 資料品質測試 → EventBridge 排程。</span>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">7</span>
+        <div>
+          <strong>Week 11：BI Dashboard ⭐ v3 新增</strong><br>
+          <span style="opacity:0.9;font-size:14px;">Tableau Public 或 Power BI 連 Athena，4 個 Dashboard 全部產出。</span>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">8</span>
+        <div>
+          <strong>Week 12：英文文件 + GitHub Polish</strong><br>
+          <span style="opacity:0.9;font-size:14px;">README / RUNBOOK / COST_ANALYSIS，Dashboard 截圖嵌入 README。</span>
+        </div>
+      </li>
+      <li>
+        <span class="action-num">9</span>
+        <div>
+          <strong>Week 13+：開始投履歷 + 啟動第二波</strong><br>
+          <span style="opacity:0.9;font-size:14px;">RAG 新聞模組是面試最大殺手鐧。</span>
+        </div>
+      </li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <p>📄 文件版本：v3.0 | 撰寫日期：2026-05-24 | 作者：Wendy Tsai</p>
+  <p>v3 主要升級：Medallion Architecture + dbt + Athena + Power BI 完整整合</p>
+  <p>歷史版本：v2（不含分析層）、v1（最初版本）皆保留於 docs/planning/</p>
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    themeVariables: {
+      primaryColor: '#dbeafe',
+      primaryTextColor: '#1e3a5f',
+      primaryBorderColor: '#3b82f6',
+      lineColor: '#6b7280',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif',
+      fontSize: '14px'
+    },
+    flowchart: { curve: 'basis', padding: 20 },
+    sequence: { actorMargin: 60, noteMargin: 16 }
+  });
+</script>
+
+</body>
+</html>
