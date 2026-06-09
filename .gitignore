@@ -63,7 +63,7 @@ override.tf.json
 .terraformrc
 terraform.rc
 .terraform/
-.terraform.lock.hcl
+# 注意：.terraform.lock.hcl 應該進版控（鎖定 provider hash，CI/本機可重現），不要 ignore
 
 # Plan output (may contain sensitive data)
 *tfplan*
