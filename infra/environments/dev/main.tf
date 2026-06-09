@@ -72,3 +72,17 @@ module "hot_store" {
     Component = "hot-store"
   }
 }
+
+# GitHub Actions OIDC：讓 CI 以短期憑證假冒 role，無需把 AWS 長期金鑰存進 GitHub Secrets
+module "github_oidc" {
+  source    = "../../modules/iam-github-oidc"
+  role_name = "${var.project}-gha-${var.environment}"
+
+  # 信任整個 repo（PR 跑 plan、main 跑 apply 皆可）
+  subjects = ["repo:wendy587941/tw_stock_bot:*"]
+
+  # managed_policy_arns 預設 AdministratorAccess（學習階段，與本機 admin user 一致，上線前收斂）
+  tags = {
+    Component = "ci-cd"
+  }
+}

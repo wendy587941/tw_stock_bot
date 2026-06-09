@@ -17,3 +17,8 @@ output "hot_store_table_arn" {
   description = "DynamoDB hot store 表 ARN"
   value       = module.hot_store.table_arn
 }
+
+output "github_actions_role_arn" {
+  description = "GitHub Actions workflow 要填的 role-to-assume ARN"
+  value       = module.github_oidc.role_arn
+}
