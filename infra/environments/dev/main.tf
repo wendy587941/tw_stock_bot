@@ -29,3 +29,46 @@ module "data_lake" {
     Component = "data-lake"
   }
 }
+
+# DynamoDB Hot Store（單表設計：PK/SK + GSI1 按日期 + GSI2 訊號 sparse index）
+module "hot_store" {
+  source     = "../../modules/dynamodb"
+  table_name = "${var.project}-hot-${var.environment}"
+  hash_key   = "PK"
+  range_key  = "SK"
+
+  # 主鍵 + GSI 鍵屬性（非鍵屬性如 close/volume/score 不需在此宣告）
+  attributes = [
+    { name = "PK", type = "S" },     # 例：STOCK#2330
+    { name = "SK", type = "S" },     # 例：DATE#2026-06-09
+    { name = "GSI1PK", type = "S" }, # 例：DATE#2026-06-09
+    { name = "GSI1SK", type = "S" }, # 例：STOCK#2330
+    { name = "GSI2PK", type = "S" }, # 例：SIGNAL#2026-06-09（僅訊號項目才寫，故稀疏）
+    { name = "GSI2SK", type = "S" }, # 例：SCORE#0.85#STOCK#2330
+  ]
+
+  global_secondary_indexes = [
+    {
+      # 查某交易日全部個股特徵
+      name            = "GSI1"
+      hash_key        = "GSI1PK"
+      range_key       = "GSI1SK"
+      projection_type = "ALL"
+    },
+    {
+      # Sparse index：只有產生買賣訊號的項目才填 GSI2PK，索引只含訊號 → 查訊號超省
+      name            = "GSI2"
+      hash_key        = "GSI2PK"
+      range_key       = "GSI2SK"
+      projection_type = "ALL"
+    },
+  ]
+
+  ttl_attribute          = "ExpiresAt" # 原始特徵到期自動刪，控 hot store 成本
+  point_in_time_recovery = true        # 連續備份，展現維運成熟度
+  deletion_protection    = false       # dev 便於 destroy
+
+  tags = {
+    Component = "hot-store"
+  }
+}
