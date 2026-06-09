@@ -1,0 +1,116 @@
+name: Terraform
+
+# PR：跑 plan 並把結果貼回 PR；push 到 main：跑 apply
+on:
+  pull_request:
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform.yml"
+
+permissions:
+  id-token: write      # 必要：向 AWS 換發 OIDC 短期憑證
+  contents: read       # checkout
+  pull-requests: write # 在 PR 貼 plan 結果
+
+# 同時間只允許一個 dev 部署，避免並行 apply 互踩 state lock
+concurrency:
+  group: terraform-dev
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-1
+  # 此 role 信任政策已鎖定 repo:wendy587941/tw_stock_bot:*，外部 repo 無法假冒
+  # 若不想把 ARN 寫進檔案，可改用 ${{ vars.AWS_GHA_ROLE_ARN }} 並在 repo 設定 Variables
+  AWS_ROLE_ARN: arn:aws:iam::623527520068:role/wendy-tw-stock-bot-gha-dev
+  TF_VERSION: "1.15.5"
+
+jobs:
+  terraform:
+    name: Terraform (dev)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/environments/dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # fmt 檢查整個 infra/，不限 dev
+      - name: Terraform Format Check
+        id: fmt
+        run: terraform fmt -check -recursive
+        working-directory: infra
+        continue-on-error: true
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan -input=false -no-color -out=tfplan
+          terraform show -no-color tfplan > plan.txt
+        continue-on-error: true
+
+      - name: Comment Plan on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'infra/environments/dev/plan.txt';
+            let plan = fs.existsSync(path) ? fs.readFileSync(path, 'utf8') : '(無 plan 輸出)';
+            const max = 60000; // GitHub 留言上限 65536，保守截斷
+            if (plan.length > max) plan = plan.slice(0, max) + '\n... (已截斷，完整內容見 Actions log)';
+            const body = [
+              '#### Terraform Plan `dev` 🌍',
+              '',
+              '| 步驟 | 結果 |',
+              '| --- | --- |',
+              '| fmt | `${{ steps.fmt.outcome }}` |',
+              '| plan | `${{ steps.plan.outcome }}` |',
+              '',
+              '<details><summary>展開 Plan 內容</summary>',
+              '',
+              '```hcl',
+              plan,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+      # plan 失敗就讓整個 job 失敗（前面 continue-on-error 只為了先貼留言）
+      - name: Fail if Plan Errored
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+      # 只有 push 到 main 才實際套用（套用 plan 階段產出的 tfplan，確保所見即所得）
+      - name: Terraform Apply
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: terraform apply -input=false -auto-approve tfplan
