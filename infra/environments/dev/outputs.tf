@@ -33,8 +33,23 @@ output "ingest_dlq_url" {
   value       = module.ingest_queue.dlq_url
 }
 
+output "ecr_repository_urls" {
+  description = "ECR repository URL（docker build/push 與 Lambda image_uri 用）"
+  value       = module.ecr.repository_urls
+}
+
+output "dispatcher_function_name" {
+  description = "Dispatcher Lambda 名稱（lambda_image_tag 未設時為 null）"
+  value       = one(module.dispatcher[*].function_name)
+}
+
+output "worker_function_name" {
+  description = "Worker Lambda 名稱（lambda_image_tag 未設時為 null）"
+  value       = one(module.worker[*].function_name)
+}
+
 output "etl_schedule_arn" {
-  description = "每日 ETL 排程 ARN（dispatcher Lambda ARN 填入前為 null）"
+  description = "每日 ETL 排程 ARN（lambda_image_tag 未設時為 null）"
   value       = one(module.schedule_etl[*].schedule_arn)
 }
 

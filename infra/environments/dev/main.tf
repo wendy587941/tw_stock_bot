@@ -88,17 +88,95 @@ module "ingest_queue" {
   }
 }
 
-# 每日 ETL 排程：15:30（台北、收盤後）觸發 dispatcher Lambda 開始當日抓取
-# 目標 Lambda 尚未建立 → dispatcher_lambda_arn 留空時 count=0 不建立；填入後即啟用整條觸發鏈
+# ECR：存放 dispatcher / worker 的容器 image（Lambda Docker 部署來源）
+module "ecr" {
+  source  = "../../modules/ecr"
+  project = var.project
+
+  repositories = {
+    dispatcher = {} # 派工：列出個股 → fan-out 進 ingest queue
+    worker     = {} # 消費：抓取單檔 → 寫 Bronze/Silver + DynamoDB
+  }
+
+  tags = {
+    Component = "container-registry"
+  }
+}
+
+# Dispatcher Lambda：被 EventBridge 觸發 → 列出當日個股 → fan-out 送進 ingest queue
+# 守門：lambda_image_tag 留空時 count=0 不建立（容器 Lambda 須先有 image 才能建）
+module "dispatcher" {
+  source = "../../modules/lambda"
+  count  = var.lambda_image_tag != "" ? 1 : 0
+
+  function_name = "${var.project}-dispatcher-${var.environment}"
+  description   = "列出當日個股並 fan-out 進 ingest queue"
+  image_uri     = "${module.ecr.repository_urls["dispatcher"]}:${var.lambda_image_tag}"
+  timeout       = 120 # 派工含外部 API 取個股清單，給較寬裕時間
+
+  environment_variables = {
+    INGEST_QUEUE_URL = module.ingest_queue.queue_url
+  }
+
+  # 僅授「送訊到 ingest 佇列」最小權限
+  additional_iam_statements = [{
+    sid       = "FanOutToIngestQueue"
+    actions   = ["sqs:SendMessage"]
+    resources = [module.ingest_queue.queue_arn]
+  }]
+
+  tags = { Component = "dispatcher" }
+}
+
+# Worker Lambda：被 ingest queue 觸發 → 抓單檔 → 寫 Bronze(raw JSON)+Silver(Parquet)+DynamoDB
+module "worker" {
+  source = "../../modules/lambda"
+  count  = var.lambda_image_tag != "" ? 1 : 0
+
+  function_name = "${var.project}-worker-${var.environment}"
+  description   = "消費 ingest queue，抓取並寫入 Bronze/Silver 與 hot store"
+  image_uri     = "${module.ecr.repository_urls["worker"]}:${var.lambda_image_tag}"
+  timeout       = 60 # < ingest queue visibility 360s
+
+  environment_variables = {
+    RAW_BUCKET     = module.data_lake.bucket_ids["raw"]
+    CURATED_BUCKET = module.data_lake.bucket_ids["curated"]
+    HOT_TABLE      = module.hot_store.table_name
+  }
+
+  # 由 ingest queue 觸發（消費權限由 module 依此旗標自動附掛）
+  create_sqs_event_source = true
+  sqs_queue_arn           = module.ingest_queue.queue_arn
+  sqs_batch_size          = 10
+
+  # 業務最小權限：寫 Bronze/Silver 物件 + 寫 hot store
+  additional_iam_statements = [
+    {
+      sid       = "WriteDataLake"
+      actions   = ["s3:PutObject"]
+      resources = ["${module.data_lake.bucket_arns["raw"]}/*", "${module.data_lake.bucket_arns["curated"]}/*"]
+    },
+    {
+      sid       = "WriteHotStore"
+      actions   = ["dynamodb:PutItem", "dynamodb:BatchWriteItem"]
+      resources = [module.hot_store.table_arn]
+    },
+  ]
+
+  tags = { Component = "worker" }
+}
+
+# 每日 ETL 排程：15:30（台北、收盤後）觸發 dispatcher 開始當日抓取
+# 跟著 dispatcher 一起活化：dispatcher 建立後（lambda_image_tag 有值）排程才建並指向它
 module "schedule_etl" {
   source = "../../modules/eventbridge-schedule"
-  count  = var.dispatcher_lambda_arn != "" ? 1 : 0
+  count  = length(module.dispatcher) > 0 ? 1 : 0
 
   schedule_name   = "${var.project}-etl-${var.environment}"
   description     = "每日 15:30（台北）觸發 ETL dispatcher"
   cron_expression = "cron(30 15 * * ? *)" # 分 時 日 月 週 年；每天 15:30
   timezone        = "Asia/Taipei"
-  target_arn      = var.dispatcher_lambda_arn
+  target_arn      = module.dispatcher[0].function_arn
   target_input    = jsonencode({ job = "daily-etl" })
 
   tags = {
