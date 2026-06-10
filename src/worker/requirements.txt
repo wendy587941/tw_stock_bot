@@ -1,0 +1,3 @@
+# Parquet 轉換所需；boto3 由 Lambda base image 提供，不在此列。
+pandas==2.2.3
+pyarrow==18.1.0

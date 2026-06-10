@@ -1,0 +1,2 @@
+# dispatcher 僅用標準庫（json/urllib/datetime）與 boto3。
+# boto3 已內建於 AWS Lambda Python base image，故此處無需額外套件。
