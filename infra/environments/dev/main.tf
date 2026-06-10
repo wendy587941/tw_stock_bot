@@ -88,6 +88,24 @@ module "ingest_queue" {
   }
 }
 
+# 每日 ETL 排程：15:30（台北、收盤後）觸發 dispatcher Lambda 開始當日抓取
+# 目標 Lambda 尚未建立 → dispatcher_lambda_arn 留空時 count=0 不建立；填入後即啟用整條觸發鏈
+module "schedule_etl" {
+  source = "../../modules/eventbridge-schedule"
+  count  = var.dispatcher_lambda_arn != "" ? 1 : 0
+
+  schedule_name   = "${var.project}-etl-${var.environment}"
+  description     = "每日 15:30（台北）觸發 ETL dispatcher"
+  cron_expression = "cron(30 15 * * ? *)" # 分 時 日 月 週 年；每天 15:30
+  timezone        = "Asia/Taipei"
+  target_arn      = var.dispatcher_lambda_arn
+  target_input    = jsonencode({ job = "daily-etl" })
+
+  tags = {
+    Component = "schedule"
+  }
+}
+
 # GitHub Actions OIDC：讓 CI 以短期憑證假冒 role，無需把 AWS 長期金鑰存進 GitHub Secrets
 module "github_oidc" {
   source    = "../../modules/iam-github-oidc"

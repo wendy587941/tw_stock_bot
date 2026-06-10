@@ -33,6 +33,11 @@ output "ingest_dlq_url" {
   value       = module.ingest_queue.dlq_url
 }
 
+output "etl_schedule_arn" {
+  description = "每日 ETL 排程 ARN（dispatcher Lambda ARN 填入前為 null）"
+  value       = one(module.schedule_etl[*].schedule_arn)
+}
+
 output "github_actions_role_arn" {
   description = "GitHub Actions workflow 要填的 role-to-assume ARN"
   value       = module.github_oidc.role_arn
