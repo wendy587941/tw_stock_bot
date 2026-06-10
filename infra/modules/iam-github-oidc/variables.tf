@@ -9,7 +9,7 @@ variable "subjects" {
     例：["repo:OWNER/REPO:*"]（整個 repo）或
         ["repo:OWNER/REPO:ref:refs/heads/main"]（僅 main）。
   EOT
-  type    = list(string)
+  type        = list(string)
 }
 
 variable "create_oidc_provider" {
@@ -30,8 +30,8 @@ variable "managed_policy_arns" {
     預設 AdministratorAccess（學習階段，與本機 admin user 一致），
     上線前應收斂為最小權限（僅 state backend + 本專案實際使用的服務）。
   EOT
-  type    = list(string)
-  default = ["arn:aws:iam::aws:policy/AdministratorAccess"]
+  type        = list(string)
+  default     = ["arn:aws:iam::aws:policy/AdministratorAccess"]
 }
 
 variable "tags" {

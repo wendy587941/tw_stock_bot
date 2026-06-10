@@ -73,6 +73,21 @@ module "hot_store" {
   }
 }
 
+# 派工佇列：EventBridge 觸發 dispatcher → 把每檔股票代號 fan-out 進此佇列 → worker Lambda 消費
+# 標準佇列即可（個股處理彼此獨立、不需順序）；失敗訊息自動進 DLQ 隔離
+module "ingest_queue" {
+  source     = "../../modules/sqs"
+  queue_name = "${var.project}-ingest-${var.environment}"
+
+  # worker 單檔 ETL 預估 < 60s，隱藏時間設 6 倍緩衝避免處理中被重複取出
+  visibility_timeout_seconds = 360
+  max_receive_count          = 5 # 重試 5 次仍失敗 → 轉 DLQ
+
+  tags = {
+    Component = "ingest-queue"
+  }
+}
+
 # GitHub Actions OIDC：讓 CI 以短期憑證假冒 role，無需把 AWS 長期金鑰存進 GitHub Secrets
 module "github_oidc" {
   source    = "../../modules/iam-github-oidc"
