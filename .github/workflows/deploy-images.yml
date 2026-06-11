@@ -1,0 +1,134 @@
+name: Deploy Images
+
+# 應用程式碼／Dockerfile 變動 → 雲端 build ARM64 image、push ECR、
+# 以 git SHA 為不可變 tag 部署 Lambda。本機無 Docker，故 build 全在 Actions 上跑。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - ".github/workflows/deploy-images.yml"
+  # 允許手動觸發（例如只想重建 image 重新部署，未改程式碼時）
+  workflow_dispatch:
+
+permissions:
+  id-token: write # OIDC 換發 AWS 短期憑證
+  contents: read  # checkout
+
+env:
+  AWS_REGION: ap-northeast-1
+  AWS_ROLE_ARN: arn:aws:iam::623527520068:role/wendy-tw-stock-bot-gha-dev
+  TF_VERSION: "1.15.5"
+  # 服務名 -> 對應 src 子目錄（context）與 ECR repo 後綴（repo 全名 = <project>-<service>）
+  PROJECT: wendy-tw-stock-bot
+
+jobs:
+  # ── 第一段：build 兩支 ARM64 容器 image 並 push 到 ECR ────────────────
+  build-push:
+    name: Build & Push (ARM64)
+    runs-on: ubuntu-latest
+    # 自己跟自己不要並行（避免同時 push 同一 tag）；與 terraform-dev 不同組，
+    # build 不碰 state 可和 terraform plan 並行
+    concurrency:
+      group: deploy-images-build
+      cancel-in-progress: false
+    outputs:
+      image_tag: ${{ steps.meta.outputs.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # 不可變 tag：用 7 碼 short SHA。latest 會讓 image_uri 字串不變 → Terraform 不重部署
+      - name: Compute image tag (short SHA)
+        id: meta
+        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ARM64 (Graviton2) 跨架構 build：ubuntu runner 是 x86，靠 QEMU 模擬 aarch64
+      # （pandas/pyarrow 有 aarch64 預編 wheel，pip 只下載不編譯，模擬成本可接受）
+      # 加速選項：若 repo 為 public，可把本 job 改 runs-on: ubuntu-24.04-arm 原生跑、移除 QEMU
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push dispatcher
+        uses: docker/build-push-action@v6
+        with:
+          context: src/dispatcher
+          platforms: linux/arm64
+          provenance: false # ECR/Lambda 不需 OCI provenance attestation，關掉省事
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.PROJECT }}-dispatcher:${{ steps.meta.outputs.sha }}
+          cache-from: type=gha,scope=dispatcher
+          cache-to: type=gha,scope=dispatcher,mode=max
+
+      - name: Build & push worker
+        uses: docker/build-push-action@v6
+        with:
+          context: src/worker
+          platforms: linux/arm64
+          provenance: false
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.PROJECT }}-worker:${{ steps.meta.outputs.sha }}
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,scope=worker,mode=max
+
+      # 持久化最新部署 tag 到 repo variable，讓純 infra 變動觸發的 terraform.yml
+      # 仍讀得到已部署 tag，不會把 lambda_image_tag 算成空字串而誤拆 Lambda。
+      # 需 repo Settings→Actions→General→Workflow permissions = Read and write。
+      # 若仍 403：改建 PAT secret 後 GH_TOKEN: ${{ secrets.GH_PAT }}。
+      - name: Persist image tag to repo variable
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh variable set LAMBDA_IMAGE_TAG --body "${{ steps.meta.outputs.sha }}"
+
+  # ── 第二段：用剛 build 的 tag apply，活化排程→dispatcher→SQS→worker 全鏈 ──
+  terraform-apply:
+    name: Terraform Apply (activate Lambda)
+    needs: build-push
+    runs-on: ubuntu-latest
+    # 與 terraform.yml 共用同一 concurrency group → 兩條 apply 路徑永不並行搶 state lock
+    concurrency:
+      group: terraform-dev
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: infra/environments/dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      # 直接用剛 build 的 SHA（job output），不依賴 repo variable 的最終一致性
+      - name: Terraform Apply
+        run: |
+          terraform apply -input=false -auto-approve \
+            -var="lambda_image_tag=${{ needs.build-push.outputs.image_tag }}"
