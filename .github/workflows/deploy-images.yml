@@ -87,14 +87,16 @@ jobs:
           cache-from: type=gha,scope=worker
           cache-to: type=gha,scope=worker,mode=max
 
-      # 持久化最新部署 tag 到 repo variable，讓純 infra 變動觸發的 terraform.yml
-      # 仍讀得到已部署 tag，不會把 lambda_image_tag 算成空字串而誤拆 Lambda。
-      # 需 repo Settings→Actions→General→Workflow permissions = Read and write。
-      # 若仍 403：改建 PAT secret 後 GH_TOKEN: ${{ secrets.GH_PAT }}。
-      - name: Persist image tag to repo variable
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh variable set LAMBDA_IMAGE_TAG --body "${{ steps.meta.outputs.sha }}"
+      # 持久化最新部署 tag 到 SSM Parameter Store（本 job 已有 OIDC AWS 憑證，免額外 secret；
+      # GITHUB_TOKEN 無法寫 repo variable，故不走 gh variable）。terraform.yml 純 infra 變動時
+      # 會讀此參數，確保不會把 lambda_image_tag 算成空字串而誤拆 Lambda。
+      # SSM Standard 參數免費，符合低 TCO。
+      - name: Persist image tag to SSM
+        run: |
+          aws ssm put-parameter \
+            --name /wendy-tw-stock-bot/dev/lambda_image_tag \
+            --type String --overwrite \
+            --value "${{ steps.meta.outputs.sha }}"
 
   # ── 第二段：用剛 build 的 tag apply，活化排程→dispatcher→SQS→worker 全鏈 ──
   terraform-apply:
