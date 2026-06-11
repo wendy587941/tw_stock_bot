@@ -116,6 +116,8 @@ module "dispatcher" {
 
   environment_variables = {
     INGEST_QUEUE_URL = module.ingest_queue.queue_url
+    # 國定假日（非交易日）清單，逗號分隔；dispatcher 用來擋掉假日抓到的舊資料寫成髒資料
+    MARKET_HOLIDAYS = join(",", var.market_holidays)
   }
 
   # 僅授「送訊到 ingest 佇列」最小權限
@@ -166,15 +168,16 @@ module "worker" {
   tags = { Component = "worker" }
 }
 
-# 每日 ETL 排程：15:30（台北、收盤後）觸發 dispatcher 開始當日抓取
+# 每日 ETL 排程：週一至五 15:30（台北、收盤後）觸發 dispatcher 開始當日抓取
 # 跟著 dispatcher 一起活化：dispatcher 建立後（lambda_image_tag 有值）排程才建並指向它
+# 只排平日 → 週末 Lambda 根本不喚醒，省 invocation（國定假日由 dispatcher 端 MARKET_HOLIDAYS 再擋）
 module "schedule_etl" {
   source = "../../modules/eventbridge-schedule"
   count  = length(module.dispatcher) > 0 ? 1 : 0
 
   schedule_name   = "${var.project}-etl-${var.environment}"
-  description     = "每日 15:30（台北）觸發 ETL dispatcher"
-  cron_expression = "cron(30 15 * * ? *)" # 分 時 日 月 週 年；每天 15:30
+  description     = "週一至五 15:30（台北）觸發 ETL dispatcher"
+  cron_expression = "cron(30 15 ? * MON-FRI *)" # 分 時 日 月 週 年；平日 15:30（指定週幾時日需為 ?）
   timezone        = "Asia/Taipei"
   target_arn      = module.dispatcher[0].function_arn
   target_input    = jsonencode({ job = "daily-etl" })
