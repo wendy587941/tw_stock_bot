@@ -37,7 +37,7 @@ variable "market_holidays" {
     請每年依 TWSE 官方行事曆更新：https://www.twse.com.tw/zh/trading/holiday.html
     （留空亦可運作，僅假日當天會多寫一筆重複資料；填了最乾淨。）
   EOT
-  type = list(string)
+  type        = list(string)
   # 2026 年（民國 115）平日休市日，來源：TWSE OpenAPI holidaySchedule（官方），
   # 僅收錄落在週一至週五、市場不交易之日（開始/最後交易日等交易日不列入；週末由排程擋掉）。
   default = [
@@ -60,4 +60,21 @@ variable "market_holidays" {
     "2026-10-26", # 臺灣光復節 補假（一）
     "2026-12-25", # 行憲紀念日（五）
   ]
+}
+
+variable "bedrock_model_id" {
+  description = <<-EOT
+    analyzer 呼叫的 Bedrock 模型／推論設定檔 ID。ap-northeast-1（東京）新版 Claude 須走
+    跨區推論設定檔（日本群組前綴 jp.）。確切 ID 由 `aws bedrock list-inference-profiles
+    --region ap-northeast-1` 解析；變動時改此處即可，免改碼。
+    前置：須在 Bedrock console 對該模型開啟 model access，否則呼叫回 AccessDenied。
+  EOT
+  type        = string
+  default     = "jp.anthropic.claude-haiku-4-5-20251001-v1:0"
+}
+
+variable "top_n" {
+  description = "每類訊號（漲幅/跌幅/成交量）取前幾名，注入 analyzer 的 TOP_N env"
+  type        = number
+  default     = 5
 }

@@ -169,6 +169,58 @@ module "worker" {
   tags = { Component = "worker" }
 }
 
+data "aws_caller_identity" "current" {}
+
+# Analyzer Lambda：每日 ETL 後讀 hot store 算訊號，交 Bedrock Claude 生成投資摘要
+# 跟著 lambda_image_tag 一起活化/休眠（容器 Lambda 須先有 image）
+module "analyzer" {
+  source = "../../modules/lambda"
+  count  = var.lambda_image_tag != "" ? 1 : 0
+
+  function_name = "${var.project}-analyzer-${var.environment}"
+  description   = "讀 hot store 算訊號 + Bedrock 生成每日投資摘要"
+  image_uri     = "${module.ecr.repository_urls["analyzer"]}:${var.lambda_image_tag}"
+  timeout       = 120 # 含 Bedrock converse 往返，給較寬裕時間
+
+  environment_variables = {
+    HOT_TABLE        = module.hot_store.table_name
+    MARTS_BUCKET     = module.data_lake.bucket_ids["marts"]
+    BEDROCK_MODEL_ID = var.bedrock_model_id
+    TOP_N            = tostring(var.top_n)
+    # 與 dispatcher 共用同一份非交易日清單，假日 analyzer 空跑不呼叫 Bedrock
+    MARKET_HOLIDAYS = join(",", var.market_holidays)
+  }
+
+  additional_iam_statements = [
+    {
+      sid       = "ReadHotStoreByDate"
+      actions   = ["dynamodb:Query"]
+      resources = [module.hot_store.table_arn, "${module.hot_store.table_arn}/index/GSI1"]
+    },
+    {
+      sid       = "WriteSignalsAndSummary"
+      actions   = ["dynamodb:PutItem", "dynamodb:BatchWriteItem"]
+      resources = [module.hot_store.table_arn]
+    },
+    {
+      sid       = "WriteMarts"
+      actions   = ["s3:PutObject"]
+      resources = ["${module.data_lake.bucket_arns["marts"]}/*"]
+    },
+    {
+      # converse 底層走 InvokeModel；跨區推論設定檔需同時授 profile 與其路由的 foundation model
+      sid     = "InvokeBedrock"
+      actions = ["bedrock:InvokeModel"]
+      resources = [
+        "arn:aws:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:inference-profile/${var.bedrock_model_id}",
+        "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-*",
+      ]
+    },
+  ]
+
+  tags = { Component = "analyzer" }
+}
+
 # 每日 ETL 排程：週一至五 15:30（台北、收盤後）觸發 dispatcher 開始當日抓取
 # 跟著 dispatcher 一起活化：dispatcher 建立後（lambda_image_tag 有值）排程才建並指向它
 # 只排平日 → 週末 Lambda 根本不喚醒，省 invocation（國定假日由 dispatcher 端 MARKET_HOLIDAYS 再擋）
@@ -182,6 +234,24 @@ module "schedule_etl" {
   timezone        = "Asia/Taipei"
   target_arn      = module.dispatcher[0].function_arn
   target_input    = jsonencode({ job = "daily-etl" })
+
+  tags = {
+    Component = "schedule"
+  }
+}
+
+# 每日摘要排程：週一至五 16:00（台北，晚於 ETL 15:30 約 30 分鐘確保資料已落地）觸發 analyzer
+# 跟著 analyzer 一起活化：analyzer 建立後（lambda_image_tag 有值）排程才建並指向它
+module "schedule_analyze" {
+  source = "../../modules/eventbridge-schedule"
+  count  = length(module.analyzer) > 0 ? 1 : 0
+
+  schedule_name   = "${var.project}-analyze-${var.environment}"
+  description     = "週一至五 16:00（台北）觸發每日投資摘要"
+  cron_expression = "cron(0 16 ? * MON-FRI *)"
+  timezone        = "Asia/Taipei"
+  target_arn      = module.analyzer[0].function_arn
+  target_input    = jsonencode({ job = "daily-analyze" })
 
   tags = {
     Component = "schedule"
