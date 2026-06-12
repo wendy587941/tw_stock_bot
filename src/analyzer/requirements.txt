@@ -1,0 +1,2 @@
+# analyzer 僅用標準庫 + boto3（boto3 由 Lambda base image 提供），無額外相依。
+# 保留檔案以維持與 dispatcher/worker 一致的 Dockerfile 流程。

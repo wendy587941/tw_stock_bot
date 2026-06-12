@@ -80,6 +80,7 @@ def _process(body: str) -> None:
         "SK": f"DATE#{trade_date}",
         "GSI1PK": f"DATE#{trade_date}",
         "GSI1SK": f"STOCK#{code}",
+        "name": row["name"],  # 供 analyzer 產生可讀摘要（台積電 +3.2% 而非 2330 +3.2%）
         "close": _dec(row["close"]),
         "volume": _dec(row["volume"]),
         "ExpiresAt": expires,
