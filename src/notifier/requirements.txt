@@ -1,0 +1,2 @@
+# notifier 僅用標準庫（urllib 直呼 LINE API）+ boto3（由 Lambda base image 提供），無額外相依。
+# 保留檔案以維持與 dispatcher/worker/analyzer 一致的 Dockerfile 流程。
