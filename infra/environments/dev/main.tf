@@ -172,6 +172,11 @@ module "worker" {
 
 data "aws_caller_identity" "current" {}
 
+# SSM SecureString 以 AWS 受管金鑰 alias/aws/ssm 加密；解密需對「該金鑰」授 kms:Decrypt
+data "aws_kms_alias" "ssm" {
+  name = "alias/aws/ssm"
+}
+
 # Analyzer Lambda：每日 ETL 後讀 hot store 算訊號，交 Bedrock Claude 生成投資摘要
 # 跟著 lambda_image_tag 一起活化/休眠（容器 Lambda 須先有 image）
 module "analyzer" {
@@ -222,6 +227,48 @@ module "analyzer" {
   tags = { Component = "analyzer" }
 }
 
+# Notifier Lambda：每日 analyzer 跑完後讀 SUMMARY → 格式化 → LINE Push API 推給使用者
+# 跟著 lambda_image_tag 一起活化/休眠（容器 Lambda 須先有 image）
+module "notifier" {
+  source = "../../modules/lambda"
+  count  = var.lambda_image_tag != "" ? 1 : 0
+
+  function_name = "${var.project}-notifier-${var.environment}"
+  description   = "讀每日盤勢摘要並透過 LINE Push API 推播"
+  image_uri     = "${module.ecr.repository_urls["notifier"]}:${var.lambda_image_tag}"
+  timeout       = 30  # 單筆 GetItem + 一次 SSM 讀 + 一次 LINE HTTP 呼叫，很快
+  memory_size   = 256 # 無 pandas，最省記憶體
+
+  environment_variables = {
+    HOT_TABLE  = module.hot_store.table_name
+    SSM_PREFIX = var.line_ssm_prefix
+    # 與 dispatcher/analyzer 共用同一份非交易日清單，假日 notifier 空跑不呼叫 LINE
+    MARKET_HOLIDAYS = join(",", var.market_holidays)
+  }
+
+  additional_iam_statements = [
+    {
+      sid       = "ReadDailySummary"
+      actions   = ["dynamodb:GetItem"]
+      resources = [module.hot_store.table_arn]
+    },
+    {
+      # 讀 LINE channel access token（SecureString）與推播目標；限定本專案 line/ 路徑前綴
+      sid       = "ReadLineConfig"
+      actions   = ["ssm:GetParameter", "ssm:GetParameters"]
+      resources = ["arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${var.line_ssm_prefix}/*"]
+    },
+    {
+      # 解密 SecureString（AWS 受管 aws/ssm 金鑰），限定該金鑰最小權限
+      sid       = "DecryptLineConfig"
+      actions   = ["kms:Decrypt"]
+      resources = [data.aws_kms_alias.ssm.target_key_arn]
+    },
+  ]
+
+  tags = { Component = "notifier" }
+}
+
 # 每日 ETL 排程：週一至五 15:30（台北、收盤後）觸發 dispatcher 開始當日抓取
 # 跟著 dispatcher 一起活化：dispatcher 建立後（lambda_image_tag 有值）排程才建並指向它
 # 只排平日 → 週末 Lambda 根本不喚醒，省 invocation（國定假日由 dispatcher 端 MARKET_HOLIDAYS 再擋）
@@ -253,6 +300,24 @@ module "schedule_analyze" {
   timezone        = "Asia/Taipei"
   target_arn      = module.analyzer[0].function_arn
   target_input    = jsonencode({ job = "daily-analyze" })
+
+  tags = {
+    Component = "schedule"
+  }
+}
+
+# 每日推播排程：週一至五 16:30（台北，晚於 analyzer 16:00 約 30 分鐘確保摘要已落地）觸發 notifier
+# 跟著 notifier 一起活化：notifier 建立後（lambda_image_tag 有值）排程才建並指向它
+module "schedule_notify" {
+  source = "../../modules/eventbridge-schedule"
+  count  = length(module.notifier) > 0 ? 1 : 0
+
+  schedule_name   = "${var.project}-notify-${var.environment}"
+  description     = "週一至五 16:30（台北）觸發每日盤勢 LINE 推播"
+  cron_expression = "cron(30 16 ? * MON-FRI *)"
+  timezone        = "Asia/Taipei"
+  target_arn      = module.notifier[0].function_arn
+  target_input    = jsonencode({ job = "daily-notify" })
 
   tags = {
     Component = "schedule"

@@ -78,3 +78,19 @@ variable "top_n" {
   type        = number
   default     = 5
 }
+
+variable "line_ssm_prefix" {
+  description = <<-EOT
+    notifier 讀取 LINE 設定的 SSM Parameter Store 路徑前綴（不含結尾斜線）。
+    由使用者一次性手動建立（token 用 SecureString，不入版控）：
+      <prefix>/channel_access_token （SecureString，**必填**）— LINE channel access token (long-lived)
+      <prefix>/push_target          （String/SecureString，**選填**）— 指定推播對象 userId/groupId
+    push_target 未設 → notifier 走 broadcast（推給所有 OA followers，自用 bot 免取 userId）；
+    有設 → 自動改用 push 指定對象（向後相容，免改碼）。
+    建立指令（本機 bash 須 export MSYS_NO_PATHCONV=1 避免開頭 / 被轉成 Windows 路徑）：
+      aws ssm put-parameter --type SecureString \
+        --name /wendy-tw-stock-bot/dev/line/channel_access_token --value '<token>'
+  EOT
+  type        = string
+  default     = "/wendy-tw-stock-bot/dev/line"
+}
