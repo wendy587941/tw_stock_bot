@@ -97,6 +97,7 @@ module "ecr" {
     dispatcher = {} # 派工：列出個股 → fan-out 進 ingest queue
     worker     = {} # 消費：抓取單檔 → 寫 Bronze/Silver + DynamoDB
     analyzer   = {} # 摘要：讀 hot store 算訊號 + Bedrock 生成每日投資摘要
+    notifier   = {} # 推播：讀每日摘要 → LINE Push API 推給使用者
   }
 
   tags = {
