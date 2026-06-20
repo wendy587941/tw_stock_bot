@@ -87,6 +87,24 @@ resource "aws_lambda_function" "this" {
   depends_on = [aws_cloudwatch_log_group.this]
 }
 
+# 可選 Function URL（HTTP(S) 觸發，免 API Gateway，最低 TCO；webhook 入口用）
+resource "aws_lambda_function_url" "this" {
+  count              = var.create_function_url ? 1 : 0
+  function_name      = aws_lambda_function.this.function_name
+  authorization_type = var.function_url_auth_type
+}
+
+# auth_type=NONE（公開端點）時須顯式授權任意來源呼叫，並限定僅 FunctionUrl 這條路徑、
+# 且鎖 function_url_auth_type=NONE（避免被誤用為其他觸發）。安全由應用層 HMAC 驗章把關。
+resource "aws_lambda_permission" "function_url" {
+  count                  = var.create_function_url && var.function_url_auth_type == "NONE" ? 1 : 0
+  statement_id           = "AllowPublicFunctionUrl"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.this.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
+}
+
 # SQS → Lambda 觸發（worker）。回報部分批次失敗，讓成功訊息不被整批重投
 resource "aws_lambda_event_source_mapping" "sqs" {
   count = var.create_sqs_event_source ? 1 : 0

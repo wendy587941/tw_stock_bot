@@ -98,6 +98,7 @@ module "ecr" {
     worker     = {} # 消費：抓取單檔 → 寫 Bronze/Silver + DynamoDB
     analyzer   = {} # 摘要：讀 hot store 算訊號 + Bedrock 生成每日投資摘要
     notifier   = {} # 推播：讀每日摘要 → LINE Push API 推給使用者
+    webhook    = {} # 互動：LINE webhook（Function URL）→ 驗章 → 查摘要/訊號 → Reply
   }
 
   tags = {

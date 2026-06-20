@@ -87,6 +87,22 @@ variable "reserved_concurrent_executions" {
   default     = -1
 }
 
+variable "create_function_url" {
+  description = "是否建立 Lambda Function URL（HTTP 觸發、免 API Gateway；webhook 用）"
+  type        = bool
+  default     = false
+}
+
+variable "function_url_auth_type" {
+  description = <<-EOT
+    Function URL 認證方式。
+    NONE = 公開端點（需應用層自行驗章，如 LINE webhook 的 X-Line-Signature HMAC）；
+    AWS_IAM = 呼叫端需 SigV4 簽章。預設 NONE 供外部 SaaS（LINE）webhook 直接呼叫。
+  EOT
+  type        = string
+  default     = "NONE"
+}
+
 variable "tags" {
   description = "套用到函式與相關資源的標籤"
   type        = map(string)

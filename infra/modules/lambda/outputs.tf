@@ -22,3 +22,8 @@ output "log_group_name" {
   description = "CloudWatch Log Group 名稱（供 Week 6 監控 metric filter 引用，確保建立順序依賴）"
   value       = aws_cloudwatch_log_group.this.name
 }
+
+output "function_url" {
+  description = "Lambda Function URL（create_function_url=true 時才有；填入 LINE webhook 設定）"
+  value       = one(aws_lambda_function_url.this[*].function_url)
+}
