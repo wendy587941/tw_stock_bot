@@ -1,0 +1,2 @@
+# webhook 僅用標準庫（hmac/hashlib/base64/urllib 驗章與呼叫 LINE Reply API）+ boto3
+# （由 Lambda base image 提供），無額外相依。保留檔以維持各服務一致的 Dockerfile 流程。
