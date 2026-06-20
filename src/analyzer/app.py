@@ -198,6 +198,48 @@ def _generate_summary(facts: dict) -> str:
     return resp["output"]["message"]["content"][0]["text"].strip()
 
 
+# ── 純數據降級摘要（Bedrock 不可用時的 fallback，不經 LLM、純引用 facts） ──────
+# 目的：Bedrock 失敗（如帳號 Marketplace 訂閱未完成、429、5xx）時，pipeline 不應整條斷掉。
+# 改用 facts 直接組一份可讀的繁中數據摘要照樣落地，notifier 永遠有東西可推；
+# 標記 degraded 供 notifier 加註與 Week 6 CloudWatch 告警捕捉。grounding 天然成立（數字全來自 facts）。
+def _fmt_pct(v) -> str:
+    return "—" if v is None else f"{v:+.2f}%"
+
+
+def _fmt_row(r: dict, metric: str) -> str:
+    """單檔列：代號 股名 + 指定指標（漲跌幅或成交量）+ 收盤價。"""
+    head = f"{r['code']} {r['name']}" if r["name"] != r["code"] else r["code"]
+    if metric == "pct":
+        return f"{head} {_fmt_pct(r['pct_change'])}（收 {r['close']:g}）"
+    return f"{head} 成交量 {int(r['volume']):,}（收 {r['close']:g}）"
+
+
+def _fallback_summary(facts: dict) -> str:
+    """不經 LLM、純由 facts 組裝的數據摘要（Bedrock 不可用時的降級輸出）。"""
+    breadth = facts["breadth_pct"]
+    breadth_txt = f"，市場廣度 {breadth}%（上漲家數占比）" if breadth is not None else ""
+    lines = [
+        "（本則為系統自動產生之數據摘要，Bedrock 暫不可用、未經 AI 潤飾）",
+        "",
+        f"【整體氣氛】{facts['trade_date']} 全市場 {facts['total_count']} 檔，"
+        f"上漲 {facts['advancers']} 家、下跌 {facts['decliners']} 家、"
+        f"平盤 {facts['unchanged']} 家{breadth_txt}。",
+    ]
+    if facts["top_gainers"]:
+        lines.append(
+            "【漲幅領先】" + "、".join(_fmt_row(r, "pct") for r in facts["top_gainers"]) + "。"
+        )
+    if facts["top_losers"]:
+        lines.append(
+            "【跌幅領先】" + "、".join(_fmt_row(r, "pct") for r in facts["top_losers"]) + "。"
+        )
+    if facts["most_active"]:
+        lines.append(
+            "【成交量領先】" + "、".join(_fmt_row(r, "vol") for r in facts["most_active"]) + "。"
+        )
+    return "\n".join(lines)
+
+
 # ── 進入點 ──────────────────────────────────────────────────────────────────
 def handler(event, context):
     event = event or {}
@@ -222,7 +264,17 @@ def handler(event, context):
     expires = int((now + dt.timedelta(days=TTL_DAYS)).timestamp())
     signal_count = _write_signals(facts, trade_date, expires)
 
-    summary_text = _generate_summary(facts)
+    # Bedrock 不可用時不讓 pipeline 整條斷掉：降級為純數據摘要照樣落地（notifier 才有東西可推）。
+    try:
+        summary_text = _generate_summary(facts)
+        degraded = False
+        model_id = BEDROCK_MODEL_ID
+    except Exception as e:  # noqa: BLE001 — 任何 Bedrock 失敗都降級，不吞細節（log 出來供告警）
+        print(f"WARN bedrock_failed_fallback {trade_date}: {type(e).__name__}: {e}")
+        summary_text = _fallback_summary(facts)
+        degraded = True
+        model_id = "fallback-deterministic"
+
     generated_at = now.isoformat()
 
     # 摘要寫回 DynamoDB（供 LINE 即時讀）。facts 以 JSON 字串存，避免 Decimal 巢狀轉換。
@@ -232,7 +284,8 @@ def handler(event, context):
             "SK": "DAILY",
             "summary_text": summary_text,
             "facts_json": json.dumps(facts, ensure_ascii=False),
-            "model_id": BEDROCK_MODEL_ID,
+            "model_id": model_id,
+            "degraded": degraded,
             "generated_at": generated_at,
             "ExpiresAt": expires,
         }
@@ -246,7 +299,8 @@ def handler(event, context):
             {
                 "trade_date": trade_date,
                 "generated_at": generated_at,
-                "model_id": BEDROCK_MODEL_ID,
+                "model_id": model_id,
+                "degraded": degraded,
                 "facts": facts,
                 "summary_text": summary_text,
             },
@@ -257,11 +311,13 @@ def handler(event, context):
 
     print(
         f"summarized {trade_date}: total={facts['total_count']} "
-        f"adv={facts['advancers']} dec={facts['decliners']} signals={signal_count}"
+        f"adv={facts['advancers']} dec={facts['decliners']} signals={signal_count} "
+        f"degraded={degraded}"
     )
     return {
         "trade_date": trade_date,
         "summarized": True,
         "total_count": facts["total_count"],
         "signal_count": signal_count,
+        "degraded": degraded,
     }
