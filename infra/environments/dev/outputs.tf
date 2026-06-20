@@ -63,6 +63,11 @@ output "alerts_sns_topic_arn" {
   value       = module.monitoring.sns_topic_arn
 }
 
+output "webhook_function_url" {
+  description = "LINE webhook Function URL（填入 LINE Developers console webhook 設定；lambda_image_tag 未設時為 null）"
+  value       = one(module.webhook[*].function_url)
+}
+
 output "alarm_names" {
   description = "已建立的 CloudWatch alarm 名稱清單"
   value       = module.monitoring.alarm_names

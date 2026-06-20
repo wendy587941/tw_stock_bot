@@ -270,6 +270,54 @@ module "notifier" {
   tags = { Component = "notifier" }
 }
 
+# Webhook Lambda：LINE 互動入口（Function URL）。使用者傳訊 → 驗 X-Line-Signature →
+# 查最近交易日 SUMMARY / GSI2 訊號 → Reply。跟著 lambda_image_tag 一起活化/休眠。
+module "webhook" {
+  source = "../../modules/lambda"
+  count  = var.lambda_image_tag != "" ? 1 : 0
+
+  function_name = "${var.project}-webhook-${var.environment}"
+  description   = "LINE webhook：驗章 → 查每日摘要/訊號 → Reply"
+  image_uri     = "${module.ecr.repository_urls["webhook"]}:${var.lambda_image_tag}"
+  timeout       = 15  # 數筆 GetItem + 一次 GSI2 Query + 一次 LINE Reply HTTP，很快
+  memory_size   = 256 # 無 pandas，最省
+
+  # 公開 HTTP 入口（免 API Gateway，最低 TCO）；安全由 app 層 X-Line-Signature HMAC 驗章把關
+  create_function_url = true
+
+  environment_variables = {
+    HOT_TABLE  = module.hot_store.table_name
+    SSM_PREFIX = var.line_ssm_prefix
+    TOP_N      = tostring(var.top_n)
+  }
+
+  additional_iam_statements = [
+    {
+      sid       = "ReadSummary"
+      actions   = ["dynamodb:GetItem"]
+      resources = [module.hot_store.table_arn]
+    },
+    {
+      sid       = "QuerySignals"
+      actions   = ["dynamodb:Query"]
+      resources = [module.hot_store.table_arn, "${module.hot_store.table_arn}/index/GSI2"]
+    },
+    {
+      # 讀 channel_secret（驗章）+ channel_access_token（Reply），限定本專案 line/ 路徑前綴
+      sid       = "ReadLineConfig"
+      actions   = ["ssm:GetParameter", "ssm:GetParameters"]
+      resources = ["arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${var.line_ssm_prefix}/*"]
+    },
+    {
+      sid       = "DecryptLineConfig"
+      actions   = ["kms:Decrypt"]
+      resources = [data.aws_kms_alias.ssm.target_key_arn]
+    },
+  ]
+
+  tags = { Component = "webhook" }
+}
+
 # 每日 ETL 排程：週一至五 15:30（台北、收盤後）觸發 dispatcher 開始當日抓取
 # 跟著 dispatcher 一起活化：dispatcher 建立後（lambda_image_tag 有值）排程才建並指向它
 # 只排平日 → 週末 Lambda 根本不喚醒，省 invocation（國定假日由 dispatcher 端 MARKET_HOLIDAYS 再擋）
