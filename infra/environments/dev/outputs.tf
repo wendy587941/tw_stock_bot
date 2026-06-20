@@ -63,9 +63,9 @@ output "alerts_sns_topic_arn" {
   value       = module.monitoring.sns_topic_arn
 }
 
-output "webhook_function_url" {
-  description = "LINE webhook Function URL（填入 LINE Developers console webhook 設定；lambda_image_tag 未設時為 null）"
-  value       = one(module.webhook[*].function_url)
+output "webhook_url" {
+  description = "LINE webhook 入口 URL（API Gateway HTTP API；填入 LINE Developers console webhook 設定；未活化時為 null）"
+  value       = one(module.webhook_api[*].invoke_url)
 }
 
 output "alarm_names" {

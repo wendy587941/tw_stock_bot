@@ -282,8 +282,8 @@ module "webhook" {
   timeout       = 15  # 數筆 GetItem + 一次 GSI2 Query + 一次 LINE Reply HTTP，很快
   memory_size   = 256 # 無 pandas，最省
 
-  # 公開 HTTP 入口（免 API Gateway，最低 TCO）；安全由 app 層 X-Line-Signature HMAC 驗章把關
-  create_function_url = true
+  # 對外入口改走 API Gateway HTTP API（見 module.webhook_api）：本帳號公開 Function URL
+  # 被帳號層級限制（anonymous 呼叫回 403），改用 HTTP API 繞過；payload 2.0 同格式、Lambda 不需改。
 
   environment_variables = {
     HOT_TABLE  = module.hot_store.table_name
@@ -316,6 +316,21 @@ module "webhook" {
   ]
 
   tags = { Component = "webhook" }
+}
+
+# Webhook 對外入口：API Gateway HTTP API → webhook Lambda（AWS_PROXY、payload 2.0）。
+# 跟著 webhook 一起活化；公開端點安全由 webhook Lambda 的 X-Line-Signature 驗章把關。
+module "webhook_api" {
+  source = "../../modules/http-api"
+  count  = length(module.webhook) > 0 ? 1 : 0
+
+  name                 = "${var.project}-webhook-${var.environment}"
+  lambda_function_name = module.webhook[0].function_name
+  lambda_invoke_arn    = module.webhook[0].invoke_arn
+
+  tags = {
+    Component = "webhook-api"
+  }
 }
 
 # 每日 ETL 排程：週一至五 15:30（台北、收盤後）觸發 dispatcher 開始當日抓取

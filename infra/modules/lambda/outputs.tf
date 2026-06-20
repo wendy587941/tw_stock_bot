@@ -27,3 +27,8 @@ output "function_url" {
   description = "Lambda Function URL（create_function_url=true 時才有；填入 LINE webhook 設定）"
   value       = one(aws_lambda_function_url.this[*].function_url)
 }
+
+output "invoke_arn" {
+  description = "Lambda invoke ARN（供 API Gateway AWS_PROXY 整合 integration_uri 用）"
+  value       = aws_lambda_function.this.invoke_arn
+}
