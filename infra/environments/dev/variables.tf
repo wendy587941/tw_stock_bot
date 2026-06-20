@@ -79,6 +79,16 @@ variable "top_n" {
   default     = 5
 }
 
+variable "alarm_email" {
+  description = <<-EOT
+    監控告警（CloudWatch alarm → SNS）通知收件 Email。
+    Email 非機密，可直接放預設；變更收件人改此值即可。
+    ⚠️ 套用後 AWS 會寄一封 SNS 確認信，須點信中連結確認訂閱才會真正收到告警（一次性手動）。
+  EOT
+  type        = string
+  default     = "wendy587941@gmail.com"
+}
+
 variable "line_ssm_prefix" {
   description = <<-EOT
     notifier 讀取 LINE 設定的 SSM Parameter Store 路徑前綴（不含結尾斜線）。

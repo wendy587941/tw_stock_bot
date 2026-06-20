@@ -17,3 +17,8 @@ output "role_arn" {
   description = "執行角色 ARN"
   value       = aws_iam_role.this.arn
 }
+
+output "log_group_name" {
+  description = "CloudWatch Log Group 名稱（供 Week 6 監控 metric filter 引用，確保建立順序依賴）"
+  value       = aws_cloudwatch_log_group.this.name
+}

@@ -57,3 +57,13 @@ output "github_actions_role_arn" {
   description = "GitHub Actions workflow 要填的 role-to-assume ARN"
   value       = module.github_oidc.role_arn
 }
+
+output "alerts_sns_topic_arn" {
+  description = "監控告警 SNS topic ARN"
+  value       = module.monitoring.sns_topic_arn
+}
+
+output "alarm_names" {
+  description = "已建立的 CloudWatch alarm 名稱清單"
+  value       = module.monitoring.alarm_names
+}

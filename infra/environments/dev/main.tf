@@ -324,6 +324,33 @@ module "schedule_notify" {
   }
 }
 
+# Week 6 監控告警：四支 Lambda Errors + DLQ 堆積 + analyzer Bedrock 降級 + notifier 無摘要
+# → 彙整單一 SNS topic → Email。Lambda 相關 alarm 跟著 lambda_image_tag 活化（未活化時傳空值不建）。
+# SNS topic 與 DLQ alarm 不依賴 Lambda，故 module 恆建立（DLQ 本來就一直存在）。
+module "monitoring" {
+  source      = "../../modules/monitoring"
+  project     = var.project
+  alarm_email = var.alarm_email
+
+  # Lambda 活化時才有函式名可監控；四支共用同一 count 旗標，dispatcher 存在即四支皆存在
+  lambda_function_names = length(module.dispatcher) > 0 ? {
+    dispatcher = module.dispatcher[0].function_name
+    worker     = module.worker[0].function_name
+    analyzer   = module.analyzer[0].function_name
+    notifier   = module.notifier[0].function_name
+  } : {}
+
+  dlq_name = module.ingest_queue.dlq_name
+
+  # log group 名稱由 lambda module 輸出（建立正確依賴：metric filter 須等 log group 建好）
+  analyzer_log_group_name = length(module.analyzer) > 0 ? module.analyzer[0].log_group_name : ""
+  notifier_log_group_name = length(module.notifier) > 0 ? module.notifier[0].log_group_name : ""
+
+  tags = {
+    Component = "monitoring"
+  }
+}
+
 # GitHub Actions OIDC：讓 CI 以短期憑證假冒 role，無需把 AWS 長期金鑰存進 GitHub Secrets
 module "github_oidc" {
   source    = "../../modules/iam-github-oidc"
