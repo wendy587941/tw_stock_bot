@@ -79,6 +79,12 @@ variable "top_n" {
   default     = 5
 }
 
+variable "dividend_top_n" {
+  description = "殖利率排行取前幾名，注入 dividend_ingest 的 DIVIDEND_TOP_N env（與訊號 top_n 分開）"
+  type        = number
+  default     = 20
+}
+
 variable "alarm_email" {
   description = <<-EOT
     監控告警（CloudWatch alarm → SNS）通知收件 Email。

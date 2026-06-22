@@ -99,6 +99,8 @@ module "ecr" {
     analyzer   = {} # 摘要：讀 hot store 算訊號 + Bedrock 生成每日投資摘要
     notifier   = {} # 推播：讀每日摘要 → LINE Push API 推給使用者
     webhook    = {} # 互動：LINE webhook（Function URL）→ 驗章 → 查摘要/訊號 → Reply
+    # 配息領域（Week 9）：獨立擷取，抓 TWSE 配息/殖利率 → 預算彙整 item 供 webhook 查詢
+    dividend_ingest = {}
   }
 
   tags = {
