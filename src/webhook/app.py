@@ -44,6 +44,7 @@ HELP_TEXT = (
     "可用指令：\n"
     "・今日 / 盤勢 → 最近交易日台股盤勢摘要\n"
     "・訊號 → 漲幅榜 / 跌幅榜\n"
+    "・殖利率 → 全市場殖利率排行\n"
     "・help → 顯示本說明"
 )
 
@@ -77,6 +78,20 @@ def _latest_summary(max_back: int = 7) -> tuple[str | None, dict | None]:
         d = (today - dt.timedelta(days=off)).isoformat()
         item = table.get_item(Key={"PK": f"SUMMARY#{d}", "SK": "DAILY"}).get("Item")
         if item and item.get("summary_text"):
+            return d, item
+    return None, None
+
+
+def _latest_yield(max_back: int = 7) -> tuple[str | None, dict | None]:
+    """從今天往前找最近一個有殖利率排行的交易日，回 (date_str, item)；找不到回 (None, None)。
+
+    比照 _latest_summary 的回退模式（殖利率擷取排程在 17:00，當天稍晚才有資料）。
+    """
+    today = dt.datetime.now(TPE).date()
+    for off in range(max_back):
+        d = (today - dt.timedelta(days=off)).isoformat()
+        item = table.get_item(Key={"PK": f"YIELD#{d}", "SK": "RANKING"}).get("Item")
+        if item and item.get("top_json"):
             return d, item
     return None, None
 
@@ -135,12 +150,32 @@ def _signals_reply() -> str:
     return "\n".join(lines) if (gainers or losers) else "今日無訊號資料。"
 
 
+def _yield_reply() -> str:
+    d, item = _latest_yield()
+    if not item:
+        return "目前尚無可用的殖利率排行，請稍後再試。"
+    try:
+        top = json.loads(item["top_json"])
+    except (json.JSONDecodeError, KeyError):
+        return "殖利率排行資料異常，請稍後再試。"
+    if not top:
+        return "今日無殖利率排行資料。"
+    lines = [f"📈 殖利率排行｜{d}"]
+    for i, r in enumerate(top, 1):
+        name = r.get("name", r["code"])
+        head = f"{r['code']} {name}" if name != r["code"] else r["code"]
+        lines.append(f"{i}. {head} {float(r['yield']):.2f}%")
+    return "\n".join(lines)
+
+
 def _route(text: str) -> str:
     t = text.strip().lower()
     if t in ("今日", "今天", "盤勢", "大盤"):
         return _summary_reply()
     if t in ("訊號", "訊號榜", "signal", "榜"):
         return _signals_reply()
+    if t in ("殖利率", "殖利率排行", "yield"):
+        return _yield_reply()
     return HELP_TEXT
 
 
