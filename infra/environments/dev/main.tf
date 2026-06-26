@@ -335,6 +335,53 @@ module "webhook_api" {
   }
 }
 
+# Dividend Ingest Lambda（Week 9）：每日抓 TWSE 配息/殖利率 → 預算彙整 item 寫 hot store。
+# 與 OHLCV 主管線解耦、獨立排程；跟著 lambda_image_tag 一起活化/休眠（容器 Lambda 須先有 image）。
+module "dividend_ingest" {
+  source = "../../modules/lambda"
+  count  = var.lambda_image_tag != "" ? 1 : 0
+
+  function_name = "${var.project}-dividend-ingest-${var.environment}"
+  description   = "擷取 TWSE 配息/殖利率 → 預算彙整 item（殖利率排行）寫 hot store"
+  image_uri     = "${module.ecr.repository_urls["dividend_ingest"]}:${var.lambda_image_tag}"
+  timeout       = 120 # 數個 HTTP 抓取 + 批次寫入
+  memory_size   = 256 # 無 pandas，最省
+
+  environment_variables = {
+    HOT_TABLE      = module.hot_store.table_name
+    DIVIDEND_TOP_N = tostring(var.dividend_top_n)
+    # 與 dispatcher/analyzer 共用同一份非交易日清單，假日空跑不抓取
+    MARKET_HOLIDAYS = join(",", var.market_holidays)
+  }
+
+  # 只寫不讀同表：寫殖利率排行 / 配息維度 item（9b/9c 沿用同權限）
+  additional_iam_statements = [{
+    sid       = "WriteDividendItems"
+    actions   = ["dynamodb:PutItem", "dynamodb:BatchWriteItem"]
+    resources = [module.hot_store.table_arn]
+  }]
+
+  tags = { Component = "dividend-ingest" }
+}
+
+# 每日配息擷取排程：週一至五 17:00（台北，晚於 notifier 16:30）觸發 dividend_ingest
+# 跟著 dividend_ingest 一起活化（lambda_image_tag 有值才建並指向它）
+module "schedule_dividend" {
+  source = "../../modules/eventbridge-schedule"
+  count  = length(module.dividend_ingest) > 0 ? 1 : 0
+
+  schedule_name   = "${var.project}-dividend-${var.environment}"
+  description     = "週一至五 17:00（台北）觸發配息/殖利率擷取"
+  cron_expression = "cron(0 17 ? * MON-FRI *)"
+  timezone        = "Asia/Taipei"
+  target_arn      = module.dividend_ingest[0].function_arn
+  target_input    = jsonencode({ job = "daily-dividend" })
+
+  tags = {
+    Component = "schedule"
+  }
+}
+
 # 每日 ETL 排程：週一至五 15:30（台北、收盤後）觸發 dispatcher 開始當日抓取
 # 跟著 dispatcher 一起活化：dispatcher 建立後（lambda_image_tag 有值）排程才建並指向它
 # 只排平日 → 週末 Lambda 根本不喚醒，省 invocation（國定假日由 dispatcher 端 MARKET_HOLIDAYS 再擋）
@@ -400,10 +447,11 @@ module "monitoring" {
 
   # Lambda 活化時才有函式名可監控；四支共用同一 count 旗標，dispatcher 存在即四支皆存在
   lambda_function_names = length(module.dispatcher) > 0 ? {
-    dispatcher = module.dispatcher[0].function_name
-    worker     = module.worker[0].function_name
-    analyzer   = module.analyzer[0].function_name
-    notifier   = module.notifier[0].function_name
+    dispatcher      = module.dispatcher[0].function_name
+    worker          = module.worker[0].function_name
+    analyzer        = module.analyzer[0].function_name
+    notifier        = module.notifier[0].function_name
+    dividend_ingest = module.dividend_ingest[0].function_name
   } : {}
 
   dlq_name = module.ingest_queue.dlq_name
