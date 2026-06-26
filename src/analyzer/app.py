@@ -95,7 +95,9 @@ def _build_facts(today: list[dict], prev: list[dict], trade_date: str) -> dict:
     advancers = decliners = unchanged = 0
     for i in today:
         close = _f(i.get("close"))
-        if close is None:
+        # 停市/無成交個股，來源 STOCK_DAY_ALL 的 ClosingPrice 會回 0（非空字串）→ 視為無資料整列排除。
+        # 否則 (0-前收)/前收*100 = -100% 會灌爆跌幅榜，並污染下跌家數/市場廣度。
+        if close is None or close <= 0:
             continue
         code = _code_of(i)
         volume = _f(i.get("volume")) or 0.0
