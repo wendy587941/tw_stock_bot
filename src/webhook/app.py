@@ -320,6 +320,14 @@ def _yield_message(page: int = 0) -> dict:
     return _flex_msg(f"殖利率排行｜{d}", bubble, _page_quick("yld", page, pages))
 
 
+def _estimate_pay_date(ex_iso: str | None) -> str | None:
+    """以經驗法則預估到帳日 = 除息日 + 約 30 天（實際發放日以公告為準）。ex 無效回 None。"""
+    try:
+        return (dt.date.fromisoformat(ex_iso) + dt.timedelta(days=30)).isoformat()
+    except (TypeError, ValueError):
+        return None
+
+
 def _dividend_message(text: str) -> dict:
     """個股配息：解析股號 → GetItem DIVIDEND#{code}/META → Flex 卡片（缺值顯示「待公告」）。"""
     m = _CODE_RE.search(text)
@@ -339,13 +347,23 @@ def _dividend_message(text: str) -> dict:
     title = f"💰 {name}（{code}）配息" if name != code else f"💰 {code} 配息"
     cash = item.get("cash_dividend")
     cash_str = f"{float(cash):g} 元/股" if cash is not None else "待公告"
+    ex = item.get("ex_date")
+    pay = item.get("pay_date")
+    # 到帳日無權威來源（§12）→ 有除息日時補「預估約」（明確標示預估，不偽裝成確定值）
+    est = _estimate_pay_date(ex) if (not pay and ex) else None
     pairs = []
     if item.get("period"):
         pairs.append(("股利期間", item["period"]))
-    pairs.append(("除息日", item.get("ex_date") or "待公告"))
-    pairs.append(("到帳日", item.get("pay_date") or "待公告"))
+    pairs.append(("除息日", ex or "待公告"))
+    if pay:
+        pairs.append(("到帳日", pay))
+    elif est:
+        pairs.append(("到帳日", f"待公告（預估約 {est}）"))
+    else:
+        pairs.append(("到帳日", "待公告"))
     pairs.append(("現金股利", cash_str))
-    return _flex_msg(f"{name} 配息", _kv_bubble(title, pairs))
+    footer = "※ 預估到帳＝除息日＋約 30 天，實際發放日以公司/發行商公告為準" if est else None
+    return _flex_msg(f"{name} 配息", _kv_bubble(title, pairs, footer=footer))
 
 
 def _freq_message(freq: str, page: int = 0) -> dict:
