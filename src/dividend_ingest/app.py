@@ -13,7 +13,7 @@
 
 9b（本階段）：個股配息日 / 到帳日 / 現金股利
   5) 抓 t187ap45_L（股利分派情形，~1135 筆）→ 取每檔最新一筆現金股利金額 + 股利年度 + 期別
-  6) 抓 TWT48U 除權除息預告表（~296 筆未來除息）→ 補 ex_date（除息交易日，best-effort）
+  6) 抓 TWT48U_ALL 除權除息預告表（OpenAPI ~296 筆未來除息）→ 補 ex_date（除息交易日，best-effort）
   7) 兩來源在記憶體 merge → 每檔寫 DIVIDEND#{code}/META（覆寫更新；不需先讀舊值）
      —— 到帳日（pay_date）非 TWSE OpenAPI 統一欄位，一律 None，webhook 端顯示「待公告」（§12 降級）
 
@@ -33,7 +33,6 @@
 import datetime as dt
 import json
 import os
-import re
 import urllib.request
 from decimal import Decimal
 
@@ -55,9 +54,11 @@ TTL_DAYS = 400
 TWSE_BWIBBU_ALL = "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL"
 # TWSE OpenAPI：股利分派情形（現金股利金額/股利年度/期別，全市場 ~1135 筆）
 TWSE_T187AP45 = "https://openapi.twse.com.tw/v1/opendata/t187ap45_L"
-# TWSE 報表 API：除權除息預告表（未來除息日，~296 筆）。openapi v1 端點回 302，故改用報表 API。
-# 回傳 {stat, fields, data:[[除權除息日期, 股票代號, 名稱, 除權息(息/權/權息), ...現金股利...]]}
-TWSE_TWT48U = "https://www.twse.com.tw/exchangeReport/TWT48U?response=json"
+# TWSE OpenAPI：除權除息預告表（全部，list[dict] ~296 筆，僅含「已公告且近期」要除息的標的）。
+# 欄位 Date(民國 YYYMMDD) / Code / Name / Exdividend(息/權/權息) / CashDividend(ETF 多為空)。
+# 用 OpenAPI 正式端點（比 www.twse.com.tw 報表 API 穩定、欄位乾淨）；注意僅覆蓋預告窗內標的，
+# ETF 須待發行商公告除息日後才會進此表（§12 資料缺口）。
+TWSE_TWT48U_ALL = "https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL"
 
 TPE = dt.timezone(dt.timedelta(hours=8))
 
@@ -88,21 +89,6 @@ def _roc_to_iso(roc: str) -> str | None:
         return None
 
 
-_CJK_DATE_RE = re.compile(r"(\d{2,3})年(\d{1,2})月(\d{1,2})日")
-
-
-def _roc_cjk_to_iso(s: str) -> str | None:
-    """民國「YYY年MM月DD日」（如 115年07月09日，TWT48U 用此格式）→ 西元 ISO。不符回 None。"""
-    m = _CJK_DATE_RE.search(s or "")
-    if not m:
-        return None
-    year = int(m.group(1)) + 1911
-    try:
-        return dt.date(year, int(m.group(2)), int(m.group(3))).isoformat()
-    except ValueError:
-        return None
-
-
 # ── 來源抓取 ─────────────────────────────────────────────────────────────────
 def _fetch_json(url: str):
     # TWSE 報表 API 對無 UA 的請求偶會擋，帶常見 UA 提高穩定度（公開資料，無認證）
@@ -123,18 +109,8 @@ def _fetch_t187ap45() -> list[dict]:
 
 
 def _fetch_twt48u() -> list[dict]:
-    """除權除息預告表（報表 API，回 {fields, data:[[...]]}）→ 轉成 list[dict]（欄名對值）。"""
-    payload = _fetch_json(TWSE_TWT48U)
-    fields = payload.get("fields") or []
-    return [dict(zip(fields, row)) for row in (payload.get("data") or [])]
-
-
-_HTML_RE = re.compile(r"<[^>]+>")
-
-
-def _strip_html(s: str) -> str:
-    """去掉 TWT48U 現金股利欄位可能夾帶的 HTML（如 <p>待公告…</p>）。"""
-    return _HTML_RE.sub("", s or "").strip()
+    """除權除息預告表（OpenAPI TWT48U_ALL，list[dict]；欄位 Date/Code/Name/Exdividend/CashDividend）。"""
+    return _fetch_json(TWSE_TWT48U_ALL)
 
 
 def _to_float(v) -> float | None:
@@ -297,20 +273,20 @@ def _build_dividends(t187_rows: list[dict], twt48u_rows: list[dict]) -> list[dic
             "frequency": _classify_listed_frequency(r.get("股利所屬年(季)度", "")),
         }
 
-    # 2) TWT48U：補除息日（取最近一次未來除息）；只取含現金的「息/權息」
+    # 2) TWT48U_ALL：補除息日（取最近一次未來除息）；只取含現金的「息/權息」
     for r in twt48u_rows:
-        if (r.get("除權息") or "").strip() not in ("息", "權息"):
+        if (r.get("Exdividend") or "").strip() not in ("息", "權息"):
             continue
-        code = (r.get("股票代號") or "").strip()
-        ex = _roc_cjk_to_iso(r.get("除權除息日期", ""))
+        code = (r.get("Code") or "").strip()
+        ex = _roc_to_iso(r.get("Date", ""))  # TWT48U_ALL 的 Date 為民國 YYYMMDD
         if not code or not ex:
             continue
         m = metas.get(code)
         if m is None:  # 多為 ETF（不在 t187ap45 上市公司股利表）→ 用預告表補基本資料
-            cash = _to_float(_strip_html(r.get("現金股利", "")))
+            cash = _to_float(r.get("CashDividend"))
             m = metas[code] = {
                 "code": code,
-                "name": (r.get("名稱") or code).strip(),
+                "name": (r.get("Name") or code).strip(),
                 "cash_dividend": cash,
                 "dividend_year": None,
                 "period": None,

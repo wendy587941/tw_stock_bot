@@ -1,18 +1,25 @@
-"""Webhook Lambda — LINE 互動 webhook（Lambda Function URL 入口）。
+"""Webhook Lambda — LINE 互動 webhook（API Gateway HTTP API 入口）。
 
-使用者在 LINE 傳訊 → LINE Platform POST 到本函式的 Function URL：
+使用者在 LINE 傳訊 → LINE Platform POST 到本函式：
   1) 驗 X-Line-Signature（HMAC-SHA256(channel_secret, raw_body) → base64）防偽造請求
   2) 解析 events[]：
      - message(text)：指令路由
-         今日 / 盤勢 / 大盤 → 回最近一個交易日的盤勢摘要（SUMMARY）
-         訊號             → 回最近交易日的漲幅 / 跌幅榜（GSI2 sparse 訊號索引）
-         其他             → 回 help 說明
-     - follow           → 擷取並 log userId（供日後設定 push_target），回歡迎詞
-  3) 用 replyToken 呼叫 LINE Reply API 回覆
+         今日 / 盤勢 / 大盤   → 最近交易日盤勢摘要（SUMMARY，文字）
+         訊號                 → 最近交易日漲幅 / 跌幅榜（GSI2 sparse 訊號索引，文字）
+         殖利率               → 殖利率排行（Flex 表格 + Quick Reply 翻頁）
+         配息 <股號>          → 個股除息/到帳/現金股利（Flex 卡片；ETF 未公告時誠實說明）
+         月配/季配/半年配/年配 → 該頻率配息股清單（Flex 表格 + 翻頁 + 切換頻率）
+         其他                 → help 說明
+     - postback           → Quick Reply 翻頁（'yld:<page>' / 'frq:<freq>:<page>'）
+     - follow             → 擷取並 log userId（供日後設定 push_target），回歡迎詞
+  3) 用 replyToken 呼叫 LINE Reply API 回覆（文字或 Flex）
+
+顯示策略：LINE 無原生摺疊 → 長清單（殖利率/頻率）用 Flex 表格取代純文字一面牆，
+並以 Quick Reply postback 分頁（每頁 PAGE_SIZE 筆），避免單則訊息過長。
 
 機密：channel_secret（驗章）+ channel_access_token（Reply）皆從 SSM SecureString 讀，不入版控。
 純標準庫（hmac / hashlib / base64 / json / urllib）+ boto3（base image 提供），無額外相依 → image 輕、冷啟快。
-入口用 Lambda Function URL（auth=NONE，免 API Gateway 費）；公開端點安全由上面的 HMAC 驗章把關。
+入口用 API Gateway HTTP API（payload format 2.0）；公開端點安全由上面的 HMAC 驗章把關。
 """
 
 import base64
@@ -116,6 +123,118 @@ def _get_freq_list(freq: str) -> dict | None:
     return table.get_item(Key={"PK": f"DIVFREQ#{freq}", "SK": "LIST"}).get("Item")
 
 
+# ── LINE 訊息 / Flex / Quick Reply 建構工具 ──────────────────────────────────
+# 長清單（殖利率/頻率）每頁筆數：LINE 無原生摺疊，改用 Flex 表格 + Quick Reply postback 翻頁。
+PAGE_SIZE = 10
+
+
+def _text_msg(text: str, quick: list | None = None) -> dict:
+    msg = {"type": "text", "text": text[:LINE_TEXT_LIMIT]}
+    if quick:
+        msg["quickReply"] = {"items": quick}
+    return msg
+
+
+def _flex_msg(alt_text: str, bubble: dict, quick: list | None = None) -> dict:
+    msg = {"type": "flex", "altText": alt_text[:400], "contents": bubble}
+    if quick:
+        msg["quickReply"] = {"items": quick}
+    return msg
+
+
+def _qr_postback(label: str, data: str) -> dict:
+    """Quick Reply：postback（翻頁，不在聊天室留下使用者訊息泡泡）。"""
+    return {"type": "action", "action": {"type": "postback", "label": label[:20], "data": data}}
+
+
+def _qr_message(label: str, text: str) -> dict:
+    """Quick Reply：message（送出一則文字，等同使用者打字，用於切換頻率指令）。"""
+    return {"type": "action", "action": {"type": "message", "label": label[:20], "text": text}}
+
+
+def _page_quick(prefix: str, page: int, pages: int, extra: list | None = None) -> list | None:
+    """組翻頁 Quick Reply：prefix 為 postback data 前綴（如 'yld' 或 'frq:monthly'）。"""
+    items = []
+    if page > 0:
+        items.append(_qr_postback("◀ 上一頁", f"{prefix}:{page - 1}"))
+    if page < pages - 1:
+        items.append(_qr_postback("下一頁 ▶", f"{prefix}:{page + 1}"))
+    if extra:
+        items.extend(extra)
+    return items or None
+
+
+def _list_bubble(title: str, subtitle: str, rows: list[tuple], footer: str | None = None) -> dict:
+    """排行/清單用 Flex 氣泡：rows = [(左字串, 右字串, 右側色碼)]，取代純文字一面牆。"""
+    body = [
+        {
+            "type": "box",
+            "layout": "horizontal",
+            "contents": [
+                {"type": "text", "text": left, "size": "sm", "flex": 7, "wrap": False},
+                {
+                    "type": "text",
+                    "text": right,
+                    "size": "sm",
+                    "flex": 4,
+                    "align": "end",
+                    "color": color or "#333333",
+                    "wrap": False,
+                },
+            ],
+        }
+        for left, right, color in rows
+    ] or [{"type": "text", "text": "目前無資料", "size": "sm", "color": "#999999"}]
+    header = [{"type": "text", "text": title, "weight": "bold", "size": "md"}]
+    if subtitle:
+        header.append({"type": "text", "text": subtitle, "size": "xs", "color": "#999999", "wrap": True})
+    bubble = {
+        "type": "bubble",
+        "size": "mega",
+        "header": {"type": "box", "layout": "vertical", "contents": header},
+        "body": {"type": "box", "layout": "vertical", "spacing": "sm", "contents": body},
+    }
+    if footer:
+        bubble["footer"] = {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [{"type": "text", "text": footer, "size": "xxs", "color": "#aaaaaa", "wrap": True}],
+        }
+    return bubble
+
+
+def _kv_bubble(title: str, pairs: list[tuple], footer: str | None = None) -> dict:
+    """單檔卡片 Flex 氣泡：pairs = [(欄位名, 值)]。"""
+    body = [
+        {
+            "type": "box",
+            "layout": "horizontal",
+            "contents": [
+                {"type": "text", "text": k, "size": "sm", "color": "#888888", "flex": 3},
+                {"type": "text", "text": v, "size": "sm", "flex": 5, "align": "end", "wrap": True},
+            ],
+        }
+        for k, v in pairs
+    ]
+    bubble = {
+        "type": "bubble",
+        "size": "kilo",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [{"type": "text", "text": title, "weight": "bold", "size": "md", "wrap": True}],
+        },
+        "body": {"type": "box", "layout": "vertical", "spacing": "sm", "contents": body},
+    }
+    if footer:
+        bubble["footer"] = {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [{"type": "text", "text": footer, "size": "xxs", "color": "#aaaaaa", "wrap": True}],
+        }
+    return bubble
+
+
 def _query_signals(date_str: str, signal_type: str) -> list[dict]:
     """查 GSI2 sparse 訊號索引：某交易日某類訊號（gainer/loser）分數由高到低取前 TOP_N。"""
     resp = table.query(
@@ -170,89 +289,121 @@ def _signals_reply() -> str:
     return "\n".join(lines) if (gainers or losers) else "今日無訊號資料。"
 
 
-def _yield_reply() -> str:
+def _yield_message(page: int = 0) -> dict:
+    """殖利率排行 Flex 表格（每頁 PAGE_SIZE 筆，Quick Reply 翻頁）。"""
     d, item = _latest_yield()
     if not item:
-        return "目前尚無可用的殖利率排行，請稍後再試。"
+        return _text_msg("目前尚無可用的殖利率排行，請稍後再試。")
     try:
         top = json.loads(item["top_json"])
     except (json.JSONDecodeError, KeyError):
-        return "殖利率排行資料異常，請稍後再試。"
+        return _text_msg("殖利率排行資料異常，請稍後再試。")
     if not top:
-        return "今日無殖利率排行資料。"
-    lines = [f"📈 殖利率排行｜{d}"]
-    for i, r in enumerate(top, 1):
+        return _text_msg("今日無殖利率排行資料。")
+    pages = (len(top) + PAGE_SIZE - 1) // PAGE_SIZE
+    page = max(0, min(page, pages - 1))
+    start = page * PAGE_SIZE
+    rows = []
+    for i, r in enumerate(top[start : start + PAGE_SIZE], start + 1):
         name = r.get("name", r["code"])
-        head = f"{r['code']} {name}" if name != r["code"] else r["code"]
-        lines.append(f"{i}. {head} {float(r['yield']):.2f}%")
-    return "\n".join(lines)
+        head = f"{i}. {r['code']} {name}" if name != r["code"] else f"{i}. {r['code']}"
+        rows.append((head, f"{float(r['yield']):.2f}%", "#1f8f4e"))
+    subtitle = f"{d}　第 {page + 1}/{pages} 頁（共 {len(top)} 檔）"
+    bubble = _list_bubble("📈 殖利率排行", subtitle, rows)
+    return _flex_msg(f"殖利率排行｜{d}", bubble, _page_quick("yld", page, pages))
 
 
-def _dividend_reply(text: str) -> str:
-    """個股配息：解析股號 → GetItem DIVIDEND#{code}/META → 格式化（缺值顯示「待公告」）。"""
+def _dividend_message(text: str) -> dict:
+    """個股配息：解析股號 → GetItem DIVIDEND#{code}/META → Flex 卡片（缺值顯示「待公告」）。"""
     m = _CODE_RE.search(text)
     if not m:
-        return "請輸入股號，例：配息 2330"
+        return _text_msg("請輸入股號，例：配息 2330")
     code = m.group(0).upper()
     item = _get_dividend(code)
     if not item:
-        return f"查無 {code} 的配息資料，請確認股號（例：配息 2330）。"
+        # ETF（多 00 開頭）配息日需待發行商公告才進除息預告 → 誠實說明，而非泛用「查無」（§12）
+        if code.startswith("00"):
+            return _text_msg(
+                f"{code} 目前無近期除息預告。\n"
+                "ETF 配息日需待發行商公告、進入除權除息預告後才會提供，公告後會自動更新。"
+            )
+        return _text_msg(f"查無 {code} 的配息資料，請確認股號（例：配息 2330）。")
     name = item.get("name", code)
-    head = f"{name}（{code}）" if name != code else code
+    title = f"💰 {name}（{code}）配息" if name != code else f"💰 {code} 配息"
     cash = item.get("cash_dividend")
     cash_str = f"{float(cash):g} 元/股" if cash is not None else "待公告"
-    lines = [f"💰 {head}配息"]
+    pairs = []
     if item.get("period"):
-        lines.append(f"股利期間：{item['period']}")
-    lines.append(f"除息日：{item.get('ex_date') or '待公告'}")
-    lines.append(f"到帳日：{item.get('pay_date') or '待公告'}")
-    lines.append(f"現金股利：{cash_str}")
-    return "\n".join(lines)
+        pairs.append(("股利期間", item["period"]))
+    pairs.append(("除息日", item.get("ex_date") or "待公告"))
+    pairs.append(("到帳日", item.get("pay_date") or "待公告"))
+    pairs.append(("現金股利", cash_str))
+    return _flex_msg(f"{name} 配息", _kv_bubble(title, pairs))
 
 
-def _freq_reply(freq: str) -> str:
-    """配息頻率清單：GetItem DIVFREQ#{freq}/LIST → 格式化（依除息日近→遠，截斷顯示）。"""
+def _freq_message(freq: str, page: int = 0) -> dict:
+    """配息頻率清單 Flex 表格（依除息日近→遠，每頁 PAGE_SIZE 筆，Quick Reply 翻頁 + 切換頻率）。"""
     label = FREQ_LABELS.get(freq, freq)
     item = _get_freq_list(freq)
     if not item:
-        return f"目前尚無{label}清單，請稍後再試。"
+        return _text_msg(f"目前尚無{label}清單，請稍後再試。")
     try:
         items = json.loads(item["items_json"])
     except (json.JSONDecodeError, KeyError):
-        return f"{label}清單資料異常，請稍後再試。"
+        return _text_msg(f"{label}清單資料異常，請稍後再試。")
     if not items:
-        return f"目前無{label}配息股資料。"
+        return _text_msg(f"目前無{label}配息股資料。")
     total = int(item.get("total", len(items)))
     shown = len(items)
-    head = f"🗓️ {label}清單（共 {total} 檔" + (f"，近期除息 {shown} 檔）" if total > shown else "）")
-    lines = [head]
-    for r in items:
+    pages = (shown + PAGE_SIZE - 1) // PAGE_SIZE
+    page = max(0, min(page, pages - 1))
+    start = page * PAGE_SIZE
+    rows = []
+    for r in items[start : start + PAGE_SIZE]:
         name = r.get("name", r["code"])
-        code_name = f"{r['code']} {name}" if name != r["code"] else r["code"]
-        lines.append(f"{code_name}　除息 {r.get('ex_date') or '待公告'}")
-    lines.append("※ ETF 頻率為精選名單，持續擴充")
-    return "\n".join(lines)
+        head = f"{r['code']} {name}" if name != r["code"] else r["code"]
+        rows.append((head, f"除息 {r.get('ex_date') or '待公告'}", "#888888"))
+    subtitle = f"共 {total} 檔" + (f"，近期除息 {shown} 檔" if total > shown else "")
+    subtitle += f"　第 {page + 1}/{pages} 頁"
+    bubble = _list_bubble(f"🗓️ {label}清單", subtitle, rows, footer="※ ETF 頻率為精選名單，持續擴充")
+    # 翻頁 + 切換其他頻率（message 型 Quick Reply）
+    switch = [_qr_message(lab, lab) for lab, fq in FREQ_COMMANDS.items() if fq != freq]
+    quick = _page_quick(f"frq:{freq}", page, pages, extra=switch)
+    return _flex_msg(f"{label}清單", bubble, quick)
 
 
-def _route(text: str) -> str:
+def _route(text: str) -> dict:
+    """文字訊息路由 → 回一則 LINE 訊息（文字或 Flex）。"""
     t = text.strip().lower()
     if t in ("今日", "今天", "盤勢", "大盤"):
-        return _summary_reply()
+        return _text_msg(_summary_reply())
     if t in ("訊號", "訊號榜", "signal", "榜"):
-        return _signals_reply()
+        return _text_msg(_signals_reply())
     if t in ("殖利率", "殖利率排行", "yield"):
-        return _yield_reply()
+        return _yield_message(0)
     if text.strip() in FREQ_COMMANDS:
-        return _freq_reply(FREQ_COMMANDS[text.strip()])
+        return _freq_message(FREQ_COMMANDS[text.strip()], 0)
     if "配息" in text:
-        return _dividend_reply(text)
-    return HELP_TEXT
+        return _dividend_message(text)
+    return _text_msg(HELP_TEXT)
+
+
+def _route_postback(data: str) -> dict | None:
+    """Quick Reply postback 翻頁路由：'yld:<page>' / 'frq:<freq>:<page>'。無法解析回 None。"""
+    parts = (data or "").split(":")
+    if len(parts) == 2 and parts[0] == "yld" and parts[1].isdigit():
+        return _yield_message(int(parts[1]))
+    if len(parts) == 3 and parts[0] == "frq" and parts[2].isdigit():
+        freq = parts[1]
+        if freq in FREQ_LABELS:
+            return _freq_message(freq, int(parts[2]))
+    return None
 
 
 # ── LINE Reply API（標準庫 urllib 直呼）──────────────────────────────────────
-def _reply(token: str, reply_token: str, text: str) -> None:
-    """以 replyToken 回覆（限時 ~1 分鐘、一次性）。失敗只 log，不讓整個 webhook 失敗（LINE 需快速 200）。"""
-    body = {"replyToken": reply_token, "messages": [{"type": "text", "text": text}]}
+def _reply(token: str, reply_token: str, message: dict) -> None:
+    """以 replyToken 回一則訊息（文字或 Flex）。限時 ~1 分鐘、一次性；失敗只 log（LINE 需快速 200）。"""
+    body = {"replyToken": reply_token, "messages": [message]}
     req = urllib.request.Request(
         LINE_REPLY_URL,
         data=json.dumps(body).encode("utf-8"),
@@ -291,10 +442,18 @@ def handler(event, context):
             uid = (ev.get("source") or {}).get("userId")
             print(f"follow event userId={uid}")  # log 出來供設定 push_target（精準推播）
             if reply_token and token:
-                _reply(token, reply_token, "歡迎！輸入「今日」看台股盤勢摘要，或「訊號」看漲跌榜。")
+                _reply(
+                    token,
+                    reply_token,
+                    _text_msg("歡迎！輸入「今日」看台股盤勢摘要，或「訊號」看漲跌榜、「殖利率」看排行。"),
+                )
         elif etype == "message" and (ev.get("message") or {}).get("type") == "text":
             if reply_token and token:
                 _reply(token, reply_token, _route(ev["message"]["text"]))
+        elif etype == "postback":
+            msg = _route_postback((ev.get("postback") or {}).get("data", ""))
+            if msg and reply_token and token:
+                _reply(token, reply_token, msg)
         # 其他事件類型（unfollow / sticker / image…）忽略，回 200 即可
 
     # LINE 期望快速 200（含 console「Verify」測試：空 events 也回 200）
