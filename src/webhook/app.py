@@ -21,6 +21,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 
@@ -45,8 +46,12 @@ HELP_TEXT = (
     "・今日 / 盤勢 → 最近交易日台股盤勢摘要\n"
     "・訊號 → 漲幅榜 / 跌幅榜\n"
     "・殖利率 → 全市場殖利率排行\n"
+    "・配息 <股號> → 除息日 / 到帳日 / 現金股利（例：配息 2330）\n"
     "・help → 顯示本說明"
 )
+
+# 股號：4~6 碼數字（可含 1 碼英文後綴，如 1101B 特別股、00940 ETF）
+_CODE_RE = re.compile(r"\d{4,6}[A-Za-z]?")
 
 
 # ── 設定讀取（SSM SecureString，需解密）──────────────────────────────────────
@@ -94,6 +99,11 @@ def _latest_yield(max_back: int = 7) -> tuple[str | None, dict | None]:
         if item and item.get("top_json"):
             return d, item
     return None, None
+
+
+def _get_dividend(code: str) -> dict | None:
+    """讀個股配息維度 DIVIDEND#{code}/META（擷取端預算好，webhook 一次 GetItem）。"""
+    return table.get_item(Key={"PK": f"DIVIDEND#{code}", "SK": "META"}).get("Item")
 
 
 def _query_signals(date_str: str, signal_type: str) -> list[dict]:
@@ -168,6 +178,28 @@ def _yield_reply() -> str:
     return "\n".join(lines)
 
 
+def _dividend_reply(text: str) -> str:
+    """個股配息：解析股號 → GetItem DIVIDEND#{code}/META → 格式化（缺值顯示「待公告」）。"""
+    m = _CODE_RE.search(text)
+    if not m:
+        return "請輸入股號，例：配息 2330"
+    code = m.group(0).upper()
+    item = _get_dividend(code)
+    if not item:
+        return f"查無 {code} 的配息資料，請確認股號（例：配息 2330）。"
+    name = item.get("name", code)
+    head = f"{name}（{code}）" if name != code else code
+    cash = item.get("cash_dividend")
+    cash_str = f"{float(cash):g} 元/股" if cash is not None else "待公告"
+    lines = [f"💰 {head}配息"]
+    if item.get("period"):
+        lines.append(f"股利期間：{item['period']}")
+    lines.append(f"除息日：{item.get('ex_date') or '待公告'}")
+    lines.append(f"到帳日：{item.get('pay_date') or '待公告'}")
+    lines.append(f"現金股利：{cash_str}")
+    return "\n".join(lines)
+
+
 def _route(text: str) -> str:
     t = text.strip().lower()
     if t in ("今日", "今天", "盤勢", "大盤"):
@@ -176,6 +208,8 @@ def _route(text: str) -> str:
         return _signals_reply()
     if t in ("殖利率", "殖利率排行", "yield"):
         return _yield_reply()
+    if "配息" in text:
+        return _dividend_reply(text)
     return HELP_TEXT
 
 
