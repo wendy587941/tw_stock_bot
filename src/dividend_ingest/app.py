@@ -21,10 +21,13 @@
   - 非交易日（週末/國定假日）直接跳過。event 帶 {"force": true} 繞過交易日檢查。
   - event 帶 {"trade_date": "YYYY-MM-DD"} 僅覆寫交易日防呆判斷；YIELD item 的日期一律以
     來源資料自帶的 Date 為準（BWIBBU 每筆含 Date），避免在非交易日把舊資料寫到錯的日期。
-  - 殖利率（9a）與配息（9b）為獨立兩段 best-effort：任一來源抓取失敗只 log WARN，
+  - 殖利率（9a）與配息（9b/9c）為獨立兩段 best-effort：任一來源抓取失敗只 log WARN，
     已成功的部分照寫，不整批失敗（§7）。
 
-9c（後續波次）：配息頻率清單（月配/季配/年配），見規劃書 §13。
+9c（本階段）：配息頻率清單（月配/季配/半年配/年配）
+  8) 上市公司頻率由官方「股利所屬年(季)度」推導（季→季配、半年→半年配、年度→年配；不需 12 月歷史）
+  9) ETF（月配主力，不在 t187ap45）由精選名單 ETF_FREQUENCY 覆寫頻率（§12 降級，持續擴充）
+  10) 依頻率分桶、除息日近→遠取前 FREQ_LIST_CAP 檔 → 寫 DIVFREQ#{freq}/LIST（webhook 一次 GetItem）
 """
 
 import datetime as dt
@@ -213,16 +216,68 @@ def _sort_key_t187(row: dict) -> tuple:
     return (issue, int(period) if period.isdigit() else 0)
 
 
+# ── 配息頻率分類（9c） ────────────────────────────────────────────────────────
+# 頻率桶（與 webhook 指令、DIVFREQ#{freq}/LIST 一致）。
+FREQ_MONTHLY = "monthly"
+FREQ_QUARTERLY = "quarterly"
+FREQ_SEMIANNUAL = "semiannual"
+FREQ_ANNUAL = "annual"
+FREQ_BUCKETS = (FREQ_MONTHLY, FREQ_QUARTERLY, FREQ_SEMIANNUAL, FREQ_ANNUAL)
+
+# 每個頻率清單存進 DynamoDB / 回 LINE 的上限（依除息日近→遠取前段；年配約千檔故必須截斷）。
+FREQ_LIST_CAP = 30
+
+# 精選 ETF 配息頻率名單（§12 降級策略）：ETF 收益分配不在 t187ap45（上市公司盈餘分配表），
+# TWSE 亦無免費的 ETF 頻率 API → 以穩定、公開周知的名單補；持續擴充，webhook 回覆會註明「ETF 為精選名單」。
+# 僅對「當期有資料（已進 META，多由 TWT48U 預告補入）」的 ETF 生效；不在此表者頻率留 unknown。
+ETF_FREQUENCY = {
+    # 月配（每月配息）
+    "00929": FREQ_MONTHLY,  # 復華台灣科技優息
+    "00934": FREQ_MONTHLY,  # 中信成長高股息
+    "00936": FREQ_MONTHLY,  # 台新永續高息中小
+    "00939": FREQ_MONTHLY,  # 統一台灣高息動能
+    "00940": FREQ_MONTHLY,  # 元大台灣價值高息
+    "00943": FREQ_MONTHLY,  # 兆豐電子高息等權
+    "00944": FREQ_MONTHLY,  # 野村趨勢動能高息
+    "00946": FREQ_MONTHLY,  # 群益科技高息成長
+    # 季配（每季配息）
+    "0056": FREQ_QUARTERLY,  # 元大高股息
+    "00878": FREQ_QUARTERLY,  # 國泰永續高股息
+    "00713": FREQ_QUARTERLY,  # 元大台灣高息低波
+    "00900": FREQ_QUARTERLY,  # 富邦特選高股息30
+    "00919": FREQ_QUARTERLY,  # 群益台灣精選高息
+    # 半年配
+    "0050": FREQ_SEMIANNUAL,  # 元大台灣50
+    "006208": FREQ_SEMIANNUAL,  # 富邦台50
+}
+
+
+def _classify_listed_frequency(span: str) -> str:
+    """上市公司頻率：用官方「股利所屬年(季)度」欄推導（不需 12 月歷史，最低 TCO）。
+
+    含「季」→季配、含「半年」→半年配、「年度」→年配；其餘 unknown。
+    """
+    s = span or ""
+    if "季" in s:
+        return FREQ_QUARTERLY
+    if "半年" in s:
+        return FREQ_SEMIANNUAL
+    if "年度" in s:
+        return FREQ_ANNUAL
+    return "unknown"
+
+
 def _build_dividends(t187_rows: list[dict], twt48u_rows: list[dict]) -> list[dict]:
     """合併兩來源 → 每檔一份 DIVIDEND META（覆寫式重建，不需先讀舊值）。
 
-    - t187ap45：現金股利金額 / 股利年度 / 期別（涵蓋面廣，同檔多筆取最新一筆）。
+    - t187ap45：現金股利金額 / 股利年度 / 期別（涵蓋面廣，同檔多筆取最新一筆）+ 由「所屬年(季)度」推頻率（9c）。
     - TWT48U：除息交易日 ex_date（僅未來除息；同檔多筆取最近一次），並補上市櫃 ETF 名稱/現金股利。
     - pay_date（到帳日）非 TWSE OpenAPI 統一欄位 → 一律 None，webhook 端顯示「待公告」（§12）。
+    - frequency（9c）：上市公司由官方所屬季度推導，ETF 由精選名單覆寫，其餘 unknown。
     """
     metas: dict[str, dict] = {}
 
-    # 1) t187ap45：同檔多筆 → 取最新一筆的現金股利/年度/期別
+    # 1) t187ap45：同檔多筆 → 取最新一筆的現金股利/年度/期別；頻率由所屬季度欄推導
     latest: dict[str, dict] = {}
     for r in t187_rows:
         code = (r.get("公司代號") or "").strip()
@@ -239,6 +294,7 @@ def _build_dividends(t187_rows: list[dict], twt48u_rows: list[dict]) -> list[dic
             "period": _period_label(r),
             "ex_date": None,
             "pay_date": None,  # 資料缺口 → 待公告（§12）
+            "frequency": _classify_listed_frequency(r.get("股利所屬年(季)度", "")),
         }
 
     # 2) TWT48U：補除息日（取最近一次未來除息）；只取含現金的「息/權息」
@@ -260,12 +316,43 @@ def _build_dividends(t187_rows: list[dict], twt48u_rows: list[dict]) -> list[dic
                 "period": None,
                 "ex_date": None,
                 "pay_date": None,
+                "frequency": "unknown",  # ETF 頻率由下方精選名單覆寫
             }
         # 同檔多筆預告 → 留最近一次除息日
         if m["ex_date"] is None or ex < m["ex_date"]:
             m["ex_date"] = ex
 
+    # 3) ETF 精選名單覆寫頻率（t187 不含 ETF；此名單對已進 META 的 ETF 生效）
+    for code, m in metas.items():
+        if code in ETF_FREQUENCY:
+            m["frequency"] = ETF_FREQUENCY[code]
+
     return list(metas.values())
+
+
+def _build_freq_lists(metas: list[dict]) -> dict[str, dict]:
+    """依 frequency 分桶 → 每桶取除息日近→遠前 FREQ_LIST_CAP 檔。
+
+    回 {freq: {"items": list[{code,name,ex_date,pay_date}], "total": int}}。
+    排序：有 ex_date 者依日期近→遠在前，無 ex_date（待公告）排最後。
+    """
+    buckets: dict[str, list] = {f: [] for f in FREQ_BUCKETS}
+    for m in metas:
+        f = m.get("frequency")
+        if f in buckets:
+            buckets[f].append(
+                {
+                    "code": m["code"],
+                    "name": m["name"],
+                    "ex_date": m["ex_date"],
+                    "pay_date": m["pay_date"],
+                }
+            )
+    out: dict[str, dict] = {}
+    for f, items in buckets.items():
+        items.sort(key=lambda x: (x["ex_date"] is None, x["ex_date"] or ""))
+        out[f] = {"items": items[:FREQ_LIST_CAP], "total": len(items)}
+    return out
 
 
 # ── 寫回 DynamoDB ────────────────────────────────────────────────────────────
@@ -311,13 +398,34 @@ def _write_dividends(metas: list[dict], now: dt.datetime) -> int:
                 "period": m["period"],
                 "ex_date": m["ex_date"],
                 "pay_date": m["pay_date"],
-                "frequency": "unknown",  # 9c 寫入實際頻率
+                "frequency": m.get("frequency") or "unknown",
                 "updated_at": iso_now,
                 "ExpiresAt": expires,
             }
             batch.put_item(Item={k: v for k, v in item.items() if v is not None})
             written += 1
     return written
+
+
+def _write_freq_lists(freq_lists: dict[str, dict], now: dt.datetime) -> dict[str, int]:
+    """每頻率一份彙整 item DIVFREQ#{freq}/LIST（webhook 一次 GetItem 取整份，免 Query/GSI）；回各桶總數。"""
+    expires = int((now + dt.timedelta(days=TTL_DAYS)).timestamp())
+    iso_now = now.isoformat()
+    counts: dict[str, int] = {}
+    for freq, data in freq_lists.items():
+        table.put_item(
+            Item={
+                "PK": f"DIVFREQ#{freq}",
+                "SK": "LIST",
+                "items_json": json.dumps(data["items"], ensure_ascii=False),
+                "count": len(data["items"]),  # 實際存入（已截斷）
+                "total": data["total"],  # 該頻率全部檔數
+                "generated_at": iso_now,
+                "ExpiresAt": expires,
+            }
+        )
+        counts[freq] = data["total"]
+    return counts
 
 
 # ── 進入點 ──────────────────────────────────────────────────────────────────
@@ -352,7 +460,7 @@ def handler(event, context):
     except Exception as e:  # noqa: BLE001 — 單一來源失敗不拖垮整批
         print(f"WARN dividend_source_failed: BWIBBU fetch/build error: {e!r}")
 
-    # ── 9b：個股配息維度（best-effort；ex_date 為 best-effort，pay_date 待公告） ──
+    # ── 9b/9c：個股配息維度 + 頻率清單（best-effort；ex_date best-effort，pay_date 待公告） ──
     try:
         t187 = _fetch_t187ap45()
         try:
@@ -369,6 +477,10 @@ def handler(event, context):
                 f"dividend meta written={written} (t187={len(t187)}, twt48u={len(twt48u)}, "
                 f"ex_date_coverage={ex_cov}/{written})"
             )
+            # 9c：頻率分桶 → DIVFREQ#{freq}/LIST
+            freq_counts = _write_freq_lists(_build_freq_lists(metas), now)
+            stats["freq_counts"] = freq_counts
+            print(f"freq lists: {freq_counts}")
         else:
             print("WARN dividend_source_failed: no dividend metas built")
     except Exception as e:  # noqa: BLE001

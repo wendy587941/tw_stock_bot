@@ -47,11 +47,16 @@ HELP_TEXT = (
     "・訊號 → 漲幅榜 / 跌幅榜\n"
     "・殖利率 → 全市場殖利率排行\n"
     "・配息 <股號> → 除息日 / 到帳日 / 現金股利（例：配息 2330）\n"
+    "・月配 / 季配 / 半年配 / 年配 → 該頻率配息股清單\n"
     "・help → 顯示本說明"
 )
 
 # 股號：4~6 碼數字（可含 1 碼英文後綴，如 1101B 特別股、00940 ETF）
 _CODE_RE = re.compile(r"\d{4,6}[A-Za-z]?")
+
+# 配息頻率指令 → DIVFREQ# 桶名（與 dividend_ingest 一致）
+FREQ_COMMANDS = {"月配": "monthly", "季配": "quarterly", "半年配": "semiannual", "年配": "annual"}
+FREQ_LABELS = {"monthly": "月配", "quarterly": "季配", "semiannual": "半年配", "annual": "年配"}
 
 
 # ── 設定讀取（SSM SecureString，需解密）──────────────────────────────────────
@@ -104,6 +109,11 @@ def _latest_yield(max_back: int = 7) -> tuple[str | None, dict | None]:
 def _get_dividend(code: str) -> dict | None:
     """讀個股配息維度 DIVIDEND#{code}/META（擷取端預算好，webhook 一次 GetItem）。"""
     return table.get_item(Key={"PK": f"DIVIDEND#{code}", "SK": "META"}).get("Item")
+
+
+def _get_freq_list(freq: str) -> dict | None:
+    """讀配息頻率清單 DIVFREQ#{freq}/LIST（擷取端預算好，webhook 一次 GetItem）。"""
+    return table.get_item(Key={"PK": f"DIVFREQ#{freq}", "SK": "LIST"}).get("Item")
 
 
 def _query_signals(date_str: str, signal_type: str) -> list[dict]:
@@ -200,6 +210,30 @@ def _dividend_reply(text: str) -> str:
     return "\n".join(lines)
 
 
+def _freq_reply(freq: str) -> str:
+    """配息頻率清單：GetItem DIVFREQ#{freq}/LIST → 格式化（依除息日近→遠，截斷顯示）。"""
+    label = FREQ_LABELS.get(freq, freq)
+    item = _get_freq_list(freq)
+    if not item:
+        return f"目前尚無{label}清單，請稍後再試。"
+    try:
+        items = json.loads(item["items_json"])
+    except (json.JSONDecodeError, KeyError):
+        return f"{label}清單資料異常，請稍後再試。"
+    if not items:
+        return f"目前無{label}配息股資料。"
+    total = int(item.get("total", len(items)))
+    shown = len(items)
+    head = f"🗓️ {label}清單（共 {total} 檔" + (f"，近期除息 {shown} 檔）" if total > shown else "）")
+    lines = [head]
+    for r in items:
+        name = r.get("name", r["code"])
+        code_name = f"{r['code']} {name}" if name != r["code"] else r["code"]
+        lines.append(f"{code_name}　除息 {r.get('ex_date') or '待公告'}")
+    lines.append("※ ETF 頻率為精選名單，持續擴充")
+    return "\n".join(lines)
+
+
 def _route(text: str) -> str:
     t = text.strip().lower()
     if t in ("今日", "今天", "盤勢", "大盤"):
@@ -208,6 +242,8 @@ def _route(text: str) -> str:
         return _signals_reply()
     if t in ("殖利率", "殖利率排行", "yield"):
         return _yield_reply()
+    if text.strip() in FREQ_COMMANDS:
+        return _freq_reply(FREQ_COMMANDS[text.strip()])
     if "配息" in text:
         return _dividend_reply(text)
     return HELP_TEXT
