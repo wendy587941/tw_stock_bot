@@ -171,12 +171,14 @@ def _list_bubble(title: str, subtitle: str, rows: list[tuple], footer: str | Non
             "type": "box",
             "layout": "horizontal",
             "contents": [
-                {"type": "text", "text": left, "size": "sm", "flex": 7, "wrap": False},
+                # 左欄（代號/股名）較長 → 不換行、放不下則截斷（代號在前，仍可辨識）
+                {"type": "text", "text": left, "size": "sm", "flex": 5, "wrap": False},
+                # 右欄（殖利率/除息日）優先完整顯示：加寬欄位，避免日期月日被截
                 {
                     "type": "text",
                     "text": right,
                     "size": "sm",
-                    "flex": 4,
+                    "flex": 5,
                     "align": "end",
                     "color": color or "#333333",
                     "wrap": False,
@@ -204,21 +206,26 @@ def _list_bubble(title: str, subtitle: str, rows: list[tuple], footer: str | Non
 
 
 def _kv_bubble(title: str, pairs: list[tuple], footer: str | None = None) -> dict:
-    """單檔卡片 Flex 氣泡：pairs = [(欄位名, 值)]。"""
+    """單檔卡片 Flex 氣泡：pairs = [(欄位名, 值)]。
+
+    採直式欄位（標籤在上、值在下、整寬 wrap）而非左右兩欄 —— 避免窄欄位把日期/值截斷。
+    """
     body = [
         {
             "type": "box",
-            "layout": "horizontal",
+            "layout": "vertical",
+            "spacing": "none",
+            "margin": "md",
             "contents": [
-                {"type": "text", "text": k, "size": "sm", "color": "#888888", "flex": 3},
-                {"type": "text", "text": v, "size": "sm", "flex": 5, "align": "end", "wrap": True},
+                {"type": "text", "text": k, "size": "xs", "color": "#999999"},
+                {"type": "text", "text": v, "size": "sm", "weight": "bold", "color": "#333333", "wrap": True},
             ],
         }
         for k, v in pairs
     ]
     bubble = {
         "type": "bubble",
-        "size": "kilo",
+        "size": "mega",
         "header": {
             "type": "box",
             "layout": "vertical",
@@ -362,9 +369,10 @@ def _freq_message(freq: str, page: int = 0) -> dict:
     for r in items[start : start + PAGE_SIZE]:
         name = r.get("name", r["code"])
         head = f"{r['code']} {name}" if name != r["code"] else r["code"]
-        rows.append((head, f"除息 {r.get('ex_date') or '待公告'}", "#888888"))
+        # 右欄只放日期（「除息」字樣移到副標），保留最大寬度給日期避免被截
+        rows.append((head, r.get("ex_date") or "待公告", "#888888"))
     subtitle = f"共 {total} 檔" + (f"，近期除息 {shown} 檔" if total > shown else "")
-    subtitle += f"　第 {page + 1}/{pages} 頁"
+    subtitle += f"　第 {page + 1}/{pages} 頁　｜ 右為除息日"
     bubble = _list_bubble(f"🗓️ {label}清單", subtitle, rows, footer="※ ETF 頻率為精選名單，持續擴充")
     # 翻頁 + 切換其他頻率（message 型 Quick Reply）
     switch = [_qr_message(lab, lab) for lab, fq in FREQ_COMMANDS.items() if fq != freq]
