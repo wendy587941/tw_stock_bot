@@ -30,6 +30,21 @@ module "data_lake" {
   }
 }
 
+# Analytics 層（Week 11 BI）：Athena 無伺服器 SQL over S3 Silver → dbt marts → Tableau。
+# 與線上熱路徑（DynamoDB）解耦；partition projection 免 Crawler，最低 TCO。
+module "analytics" {
+  source = "../../modules/analytics"
+
+  project        = var.project
+  environment    = var.environment
+  curated_bucket = module.data_lake.bucket_ids["curated"]
+  results_bucket = module.data_lake.bucket_ids["marts"] # Athena 結果輸出沿用 marts bucket
+
+  tags = {
+    Component = "analytics"
+  }
+}
+
 # DynamoDB Hot Store（單表設計：PK/SK + GSI1 按日期 + GSI2 訊號 sparse index）
 module "hot_store" {
   source     = "../../modules/dynamodb"
