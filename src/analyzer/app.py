@@ -22,6 +22,8 @@ from boto3.dynamodb.conditions import Key
 
 HOT_TABLE = os.environ["HOT_TABLE"]
 MARTS_BUCKET = os.environ["MARTS_BUCKET"]
+# 訊號逐列另寫一份到 curated（Silver），供 Athena/dbt/BI 做歷史趨勢（DynamoDB 訊號有 TTL 會過期）。
+CURATED_BUCKET = os.environ["CURATED_BUCKET"]
 BEDROCK_MODEL_ID = os.environ["BEDROCK_MODEL_ID"]
 TOP_N = int(os.environ.get("TOP_N", "5"))
 
@@ -172,6 +174,55 @@ def _write_signals(facts: dict, trade_date: str, expires: int) -> int:
     return count
 
 
+# ── 訊號寫 S3 curated（Silver，供 Athena/dbt/BI；不過期、可回溯） ─────────────
+# DynamoDB 的訊號項目帶 TTL 會過期，BI 做不了歷史趨勢；故在「算好的當下」另落一份逐列 NDJSON 到 S3。
+# 維持 analyzer 零 pandas 相依：用標準庫 json 寫 newline-delimited JSON，Athena JSON SerDe 直接讀。
+def _signal_rows(facts: dict) -> list[dict]:
+    """攤平三類訊號為逐列記錄（含名次與分數），與 _write_signals 的分數定義一致。"""
+    groups = [
+        ("gainer", facts["top_gainers"], lambda r: r["pct_change"]),
+        ("loser", facts["top_losers"], lambda r: abs(r["pct_change"]) if r["pct_change"] is not None else None),
+        ("active", facts["most_active"], lambda r: r["volume"]),
+    ]
+    out: list[dict] = []
+    for signal_type, rows, score_of in groups:
+        rank = 0
+        for r in rows:
+            score = score_of(r)
+            if score is None:
+                continue
+            rank += 1
+            out.append(
+                {
+                    "trade_date": facts["trade_date"],
+                    "signal_type": signal_type,
+                    "rank": rank,
+                    "code": r["code"],
+                    "name": r["name"],
+                    "close": r["close"],
+                    "volume": r["volume"],
+                    "pct_change": round(r["pct_change"], 4) if r["pct_change"] is not None else None,
+                    "score": round(score, 4),
+                }
+            )
+    return out
+
+
+def _write_signals_s3(facts: dict, trade_date: str) -> int:
+    """逐列訊號寫 curated/signals/date=…/signals.json（NDJSON）。回寫入列數。"""
+    rows = _signal_rows(facts)
+    if not rows:
+        return 0
+    body = "\n".join(json.dumps(r, ensure_ascii=False) for r in rows)
+    s3.put_object(
+        Bucket=CURATED_BUCKET,
+        Key=f"curated/signals/date={trade_date}/signals.json",
+        Body=body.encode("utf-8"),
+        ContentType="application/x-ndjson",
+    )
+    return len(rows)
+
+
 # ── Bedrock 摘要生成（LLM 只改寫已算好的數字） ──────────────────────────────
 _SYSTEM_PROMPT = (
     "你是專業的台股盤勢分析助理，使用繁體中文。"
@@ -265,6 +316,12 @@ def handler(event, context):
 
     expires = int((now + dt.timedelta(days=TTL_DAYS)).timestamp())
     signal_count = _write_signals(facts, trade_date, expires)
+    # 訊號另落一份不過期的 S3 副本（Silver），供 Athena/dbt/BI；失敗不拖垮主流程（摘要仍要照常產）。
+    try:
+        s3_signal_count = _write_signals_s3(facts, trade_date)
+    except Exception as e:  # noqa: BLE001
+        print(f"WARN signals_s3_write_failed {trade_date}: {type(e).__name__}: {e}")
+        s3_signal_count = 0
 
     # Bedrock 不可用時不讓 pipeline 整條斷掉：降級為純數據摘要照樣落地（notifier 才有東西可推）。
     try:
@@ -314,7 +371,7 @@ def handler(event, context):
     print(
         f"summarized {trade_date}: total={facts['total_count']} "
         f"adv={facts['advancers']} dec={facts['decliners']} signals={signal_count} "
-        f"degraded={degraded}"
+        f"signals_s3={s3_signal_count} degraded={degraded}"
     )
     return {
         "trade_date": trade_date,

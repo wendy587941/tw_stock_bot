@@ -192,8 +192,10 @@ module "analyzer" {
   timeout       = 120 # 含 Bedrock converse 往返，給較寬裕時間
 
   environment_variables = {
-    HOT_TABLE        = module.hot_store.table_name
-    MARTS_BUCKET     = module.data_lake.bucket_ids["marts"]
+    HOT_TABLE    = module.hot_store.table_name
+    MARTS_BUCKET = module.data_lake.bucket_ids["marts"]
+    # 訊號逐列副本寫 Silver（curated），供 Athena/dbt/BI 歷史趨勢（DynamoDB 訊號有 TTL 會過期）
+    CURATED_BUCKET   = module.data_lake.bucket_ids["curated"]
     BEDROCK_MODEL_ID = var.bedrock_model_id
     TOP_N            = tostring(var.top_n)
     # 與 dispatcher 共用同一份非交易日清單，假日 analyzer 空跑不呼叫 Bedrock
@@ -215,6 +217,12 @@ module "analyzer" {
       sid       = "WriteMarts"
       actions   = ["s3:PutObject"]
       resources = ["${module.data_lake.bucket_arns["marts"]}/*"]
+    },
+    {
+      # 訊號逐列副本寫 Silver（curated/signals/），供分析層回溯
+      sid       = "WriteCuratedSignals"
+      actions   = ["s3:PutObject"]
+      resources = ["${module.data_lake.bucket_arns["curated"]}/*"]
     },
     {
       # converse 底層走 InvokeModel；跨區推論設定檔需同時授 profile 與其路由的 foundation model
@@ -350,16 +358,26 @@ module "dividend_ingest" {
   environment_variables = {
     HOT_TABLE      = module.hot_store.table_name
     DIVIDEND_TOP_N = tostring(var.dividend_top_n)
+    # 殖利率排行逐列副本寫 Silver（curated），供 Athena/dbt/BI 歷史趨勢（DynamoDB 排行有 TTL 會過期）
+    CURATED_BUCKET = module.data_lake.bucket_ids["curated"]
     # 與 dispatcher/analyzer 共用同一份非交易日清單，假日空跑不抓取
     MARKET_HOLIDAYS = join(",", var.market_holidays)
   }
 
-  # 只寫不讀同表：寫殖利率排行 / 配息維度 item（9b/9c 沿用同權限）
-  additional_iam_statements = [{
-    sid       = "WriteDividendItems"
-    actions   = ["dynamodb:PutItem", "dynamodb:BatchWriteItem"]
-    resources = [module.hot_store.table_arn]
-  }]
+  # 寫殖利率排行 / 配息維度 item（9b/9c 沿用同權限）+ 殖利率 S3 副本
+  additional_iam_statements = [
+    {
+      sid       = "WriteDividendItems"
+      actions   = ["dynamodb:PutItem", "dynamodb:BatchWriteItem"]
+      resources = [module.hot_store.table_arn]
+    },
+    {
+      # 殖利率逐列副本寫 Silver（curated/yield/），供分析層回溯
+      sid       = "WriteCuratedYield"
+      actions   = ["s3:PutObject"]
+      resources = ["${module.data_lake.bucket_arns["curated"]}/*"]
+    },
+  ]
 
   tags = { Component = "dividend-ingest" }
 }

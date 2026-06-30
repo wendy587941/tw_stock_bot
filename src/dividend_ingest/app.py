@@ -39,6 +39,8 @@ from decimal import Decimal
 import boto3
 
 HOT_TABLE = os.environ["HOT_TABLE"]
+# 殖利率排行另寫一份到 curated（Silver），供 Athena/dbt/BI 做歷史趨勢（DynamoDB 排行有 TTL 會過期）。
+CURATED_BUCKET = os.environ["CURATED_BUCKET"]
 # 殖利率排行取前 N（與 analyzer 的訊號 TOP_N=5 分開，配息排行預設 20）
 TOP_N = int(os.environ.get("DIVIDEND_TOP_N", "20"))
 
@@ -63,6 +65,7 @@ TWSE_TWT48U_ALL = "https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL"
 TPE = dt.timezone(dt.timedelta(hours=8))
 
 table = boto3.resource("dynamodb").Table(HOT_TABLE)
+s3 = boto3.client("s3")
 
 
 # ── 日期/交易日工具（與 dispatcher/analyzer 一致的判斷邏輯） ──────────────────
@@ -355,6 +358,36 @@ def _write_ranking(trade_date: str, top: list[dict], now: dt.datetime) -> None:
     )
 
 
+def _write_ranking_s3(trade_date: str, top: list[dict]) -> int:
+    """殖利率排行逐列寫 curated/yield/date=…/yield.json（NDJSON，不過期，供 Athena/dbt/BI）。
+
+    維持本 Lambda 零 pandas 相依：標準庫 json 寫 newline-delimited JSON，Athena JSON SerDe 直接讀。
+    欄位以分析層友善命名（dividend_yield/pe_ratio/pb_ratio），避免與 SQL 保留字混淆。
+    """
+    if not top:
+        return 0
+    rows = [
+        {
+            "trade_date": trade_date,
+            "rank": i,
+            "code": r["code"],
+            "name": r["name"],
+            "dividend_yield": r["yield"],
+            "pe_ratio": r.get("pe"),
+            "pb_ratio": r.get("pb"),
+        }
+        for i, r in enumerate(top, 1)
+    ]
+    body = "\n".join(json.dumps(r, ensure_ascii=False) for r in rows)
+    s3.put_object(
+        Bucket=CURATED_BUCKET,
+        Key=f"curated/yield/date={trade_date}/yield.json",
+        Body=body.encode("utf-8"),
+        ContentType="application/x-ndjson",
+    )
+    return len(rows)
+
+
 def _write_dividends(metas: list[dict], now: dt.datetime) -> int:
     """每檔一份 DIVIDEND#{code}/META，batch_writer 批次寫；回實際寫入筆數。
 
@@ -428,7 +461,16 @@ def handler(event, context):
                 _write_ranking(trade_date, top, now)
                 stats["trade_date"] = trade_date
                 stats["yield_count"] = len(top)
-                print(f"yield ranking {trade_date}: top={len(top)} of {len(rows)} rows")
+                # 排行另落一份不過期的 S3 副本（Silver），供 Athena/dbt/BI；失敗不影響 DynamoDB 即時查詢。
+                try:
+                    s3_yield = _write_ranking_s3(trade_date, top)
+                except Exception as e:  # noqa: BLE001
+                    print(f"WARN yield_s3_write_failed {trade_date}: {e!r}")
+                    s3_yield = 0
+                print(
+                    f"yield ranking {trade_date}: top={len(top)} of {len(rows)} rows "
+                    f"(s3={s3_yield})"
+                )
             else:
                 print(f"WARN dividend_source_failed: no positive yield rows for {trade_date}")
         else:
