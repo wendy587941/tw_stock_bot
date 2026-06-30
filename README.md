@@ -36,19 +36,21 @@ EventBridge (15:30) → Dispatcher → SQS → Worker × N
 使用者查詢：LINE → API Gateway (HMAC) → Query Lambda → DynamoDB → LINE Reply
 ```
 
-### Warm Path（分析 + BI）⭐ v3 新增
+### Warm Path（分析 + BI）⭐ v3 新增 — ✅ Week 11 已實作
 
 ```
-EventBridge (16:00) → dbt run on Athena
-                            ↓
-                 Silver (Parquet) → Gold (marts)
-                            ↓
-                      Glue Catalog
-                            ↓
-                         Athena
-                            ↓ (ODBC)
-                  Power BI / Tableau Dashboard
+Silver: curated/*.parquet（OHLCV）+ curated/signals|yield/*.json（NDJSON）
+            ↓  Glue Catalog 外部表（partition projection，免 Crawler）
+         Athena（Serverless SQL，workgroup 成本護欄）
+            ↓  dbt-athena：staging(view) → intermediate(ephemeral) → marts(table)
+         Gold marts（fct_daily_ohlcv / mart_market_breadth / mart_top_movers / fct_signals / fct_yield）
+            ↓  (ODBC, Extract)
+         Tableau Dashboard（市場總覽 / 個股走勢 / 訊號與殖利率）
+
+排程：GitHub Actions `dbt.yml` 每日 17:30 台北 `dbt build`（零 AWS 常駐運算）
 ```
+
+> 詳見 [`bi/README.md`](bi/README.md)（連線資訊 + 儀表板規格）與 [`docs/planning/week11_bi_dashboard_規劃書.md`](docs/planning/week11_bi_dashboard_規劃書.md)。
 
 ---
 
@@ -235,7 +237,7 @@ GitHub Actions 的 YAML 配置檔。未來會有：
 - [ ] 階段五：LINE Bot 雙向互動
 - [ ] RAG 新聞情緒分析（firecrawl 整合）
 - [ ] OpenMetadata 治理整合
-- [ ] dbt + Athena 歷史回測
+- [x] dbt + Athena 分析層（Week 11：partition projection 外部表 + dbt marts + Tableau）
 
 ### 第二波（2026 Q4 - 2027 Q1）
 - [ ] Multi-Agent 協作架構
