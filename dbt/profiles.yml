@@ -1,0 +1,17 @@
+# dbt-athena-community 連線設定。
+# 數值預設指向 dev 既有資源；CI / 本機可用環境變數覆寫（不寫死帳號機密）。
+#   schema    = Glue Catalog database（analytics module 建立的 wendy_tw_stock_bot_dev）
+#   work_group= analytics module 的 Athena workgroup（結果輸出 + 成本護欄已在 workgroup 設定）
+#   s3_data_dir = dbt 物化 table 的 Parquet 落地位置（marts/dbt/）
+tw_stock_bot:
+  target: dev
+  outputs:
+    dev:
+      type: athena
+      region_name: "{{ env_var('AWS_REGION', 'ap-northeast-1') }}"
+      database: awsdatacatalog
+      schema: "{{ env_var('DBT_ATHENA_SCHEMA', 'wendy_tw_stock_bot_dev') }}"
+      work_group: "{{ env_var('DBT_ATHENA_WORKGROUP', 'wendy-tw-stock-bot-dev') }}"
+      s3_staging_dir: "{{ env_var('DBT_S3_STAGING_DIR', 's3://wendy-tw-stock-bot-marts-ap-northeast-1/athena-results/') }}"
+      s3_data_dir: "{{ env_var('DBT_S3_DATA_DIR', 's3://wendy-tw-stock-bot-marts-ap-northeast-1/dbt/') }}"
+      threads: 4

@@ -1,0 +1,30 @@
+name: tw_stock_bot
+version: "1.0.0"
+config-version: 2
+
+# 與 profiles.yml 的 profile 名稱對應
+profile: tw_stock_bot
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# 物化策略：
+#   staging      → view（薄轉換，不落地）
+#   intermediate → ephemeral（CTE 內聯，不在 Glue 產生物件）
+#   marts        → table（Parquet 落地 marts bucket，供 Tableau 掃描，快又省）
+# 全部模型放在同一個 Glue schema（profile 的 schema），避免 dbt custom schema 後綴
+# 讓 Tableau / Athena 連線單純（外部表與 marts 同庫）。
+models:
+  tw_stock_bot:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: ephemeral
+    marts:
+      +materialized: table

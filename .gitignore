@@ -149,3 +149,9 @@ logs/
 
 # Mac quarantine
 *.app
+
+# dbt 產出物（編譯結果/相依套件/執行日誌）
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+

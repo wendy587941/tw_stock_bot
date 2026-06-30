@@ -1,0 +1,16 @@
+version: 2
+
+sources:
+  - name: silver
+    description: >
+      S3 Silver 層外部表（由 infra/modules/analytics 以 partition projection 建立）。
+      OHLCV 為 Parquet（worker 寫），signals/yield 為 NDJSON（analyzer/dividend_ingest 寫）。
+    # Glue Catalog database = analytics module 的 schema
+    schema: "{{ env_var('DBT_ATHENA_SCHEMA', 'wendy_tw_stock_bot_dev') }}"
+    tables:
+      - name: silver_ohlcv
+        description: 每股每日 OHLCV（partition 鍵 date=YYYY-MM-DD）
+      - name: signals
+        description: 每日訊號逐列（gainer/loser/active，含名次與分數）
+      - name: yield_ranking
+        description: 每日殖利率排行逐列

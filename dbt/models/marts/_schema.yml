@@ -1,0 +1,56 @@
+version: 2
+
+models:
+  - name: fct_daily_ohlcv
+    description: 個股每日 OHLCV 事實（含 MA5/MA20、漲跌幅）
+    columns:
+      - name: code
+        tests: [not_null]
+      - name: trade_date
+        tests: [not_null]
+      - name: close_price
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: false
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [code, trade_date]
+
+  - name: mart_market_breadth
+    description: 每日市場廣度（漲跌家數/成交量/廣度%）
+    columns:
+      - name: trade_date
+        tests: [not_null, unique]
+      - name: total_count
+        tests: [not_null]
+
+  - name: mart_top_movers
+    description: 每日漲跌幅前 10 名
+    columns:
+      - name: trade_date
+        tests: [not_null]
+      - name: mover_type
+        tests:
+          - accepted_values:
+              values: ["gainer", "loser"]
+
+  - name: fct_signals
+    description: 每日訊號逐列（來源 curated/signals）
+    columns:
+      - name: signal_type
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["gainer", "loser", "active"]
+      - name: code
+        tests: [not_null]
+
+  - name: fct_yield
+    description: 每日殖利率排行逐列（來源 curated/yield）
+    columns:
+      - name: code
+        tests: [not_null]
+      - name: dividend_yield
+        tests: [not_null]

@@ -1,0 +1,78 @@
+name: dbt
+
+# dbt-athena 轉換：建立/更新 Gold marts（供 Tableau）。
+#   - push 到 main 改到 dbt/** → 立即重建
+#   - 每日 17:30 台北（09:30 UTC，平日）→ 晚於 analyzer 16:00 / dividend_ingest 17:00，確保 S3 當日資料已落地
+#   - 手動 workflow_dispatch
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dbt/**"
+      - ".github/workflows/dbt.yml"
+  schedule:
+    - cron: "30 9 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  id-token: write # OIDC 換發 AWS 短期憑證
+  contents: read
+
+# 避免排程與 push 同時跑 dbt 互相覆寫 marts
+concurrency:
+  group: dbt-dev
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-1
+  AWS_ROLE_ARN: arn:aws:iam::623527520068:role/wendy-tw-stock-bot-gha-dev
+  # dbt-athena 連線（與 infra/modules/analytics 一致）
+  DBT_ATHENA_SCHEMA: wendy_tw_stock_bot_dev
+  DBT_ATHENA_WORKGROUP: wendy-tw-stock-bot-dev
+  DBT_S3_STAGING_DIR: s3://wendy-tw-stock-bot-marts-ap-northeast-1/athena-results/
+  DBT_S3_DATA_DIR: s3://wendy-tw-stock-bot-marts-ap-northeast-1/dbt/
+
+jobs:
+  build:
+    name: dbt build (dev)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dbt
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dbt-athena
+        run: pip install "dbt-athena-community~=1.9"
+
+      - name: dbt deps
+        run: dbt deps
+
+      # build = run + test：建模型並跑 not_null/unique/accepted_values/range 測試
+      - name: dbt build
+        run: dbt build --profiles-dir . --target dev
+
+      # 產 lineage / docs artifact（面試可展示資料血緣）
+      - name: dbt docs generate
+        run: dbt docs generate --profiles-dir . --target dev
+
+      - name: Upload dbt artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-target
+          path: dbt/target
+          retention-days: 7
