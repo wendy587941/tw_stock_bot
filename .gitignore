@@ -156,3 +156,6 @@ dbt/dbt_packages/
 dbt/logs/
 dbt/.user.yml
 
+
+# Tableau extract data files (regenerable, may embed local paths)
+bi/tableau/*.hyper

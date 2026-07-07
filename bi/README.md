@@ -25,8 +25,16 @@ S3 Silver (curated/*.parquet + signals/yield *.json)
 | 認證 | 個人 IAM Access Key（**放本機，勿入庫**）|
 
 ### 步驟
-1. 安裝 **Amazon Athena ODBC driver**（Tableau → Connect → Amazon Athena）。
-2. 填入上表的 Region / Workgroup / S3 staging dir；認證用個人 IAM access key/secret。
+1. 安裝 **Amazon Athena JDBC driver**（⚠️ Tableau 原生「Amazon Athena」連接器吃的是 **JDBC**，不是 ODBC）：
+   - 到 AWS 官方頁抓 `athena-jdbc-3.x.x-with-dependencies.jar`（要「with-dependencies」完整版）：
+     <https://docs.aws.amazon.com/athena/latest/ug/jdbc-v3-driver.html>
+     （Tableau 較舊版本 <2023.2 若不吃 3.x，改抓舊版 Simba `AthenaJDBC42-2.x.x.jar`。）
+   - 把 `.jar` 放進 Tableau 的 Drivers 資料夾（子資料夾不存在就手動建）：
+     `C:\Users\<user>\Documents\My Tableau Repository\Drivers\`
+     （Documents 若被 OneDrive 接管則在 `...\OneDrive\Documents\My Tableau Repository\Drivers\`）
+   - **完全關閉 Tableau 再重開**，讓它重新掃 driver。
+   - 若見到「No suitable driver installed, or the URL is incorrect」→ 就是這步沒做（多半是誤裝了 ODBC driver）。ODBC 只在改走 `Other Databases (ODBC)` 連接器時才需要。
+2. Tableau → Connect → To a Server → **Amazon Athena**，填入上表的 Region / Workgroup / S3 staging dir；認證用個人 IAM access key/secret。
 3. Database 選 `wendy_tw_stock_bot_dev`，即可看到下列 marts 表。
 4. 建議所有資料來源用 **Extract（.hyper）** 而非 Live，避免每次互動都打 Athena（再省查詢費）。
 

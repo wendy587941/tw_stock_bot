@@ -15,8 +15,14 @@
 
 ## 0. 連線到 Athena（一次設定）
 
-1. 開 Tableau Desktop → 左側 **Connect → To a Server → Amazon Athena**
-   （若沒看到，先裝 **Amazon Athena ODBC driver**，見 `../README.md`）。
+> ⚠️ **先裝對 driver**：Tableau 原生「Amazon Athena」連接器吃的是 **JDBC**，**不是 ODBC**。
+> 若跳「No suitable driver installed, or the URL is incorrect」就是裝錯／沒裝。
+> - 抓 `athena-jdbc-3.x.x-with-dependencies.jar`（<https://docs.aws.amazon.com/athena/latest/ug/jdbc-v3-driver.html>）
+> - 放進 `C:\Users\<user>\Documents\My Tableau Repository\Drivers\`（OneDrive 接管則在 `...\OneDrive\Documents\...`；子資料夾不存在就手動建）
+> - **完全關閉 Tableau 再重開**。
+> - （ODBC driver 只有改走 `Connect → More → Other Databases (ODBC)` 才需要，本指南走原生連接器。）
+
+1. 開 Tableau Desktop → 左側 **Connect → To a Server → Amazon Athena**。
 2. 填連線視窗：
    | 欄位 | 值 |
    |------|----|
@@ -168,6 +174,7 @@
 
 | 症狀 | 原因 / 解法 |
 |------|------------|
+| No suitable driver installed, or the URL is incorrect | 裝成 ODBC 了；原生連接器要 **JDBC** jar 放 `My Tableau Repository\Drivers\`，重開 Tableau（見第 0 節） |
 | 漲跌幅顯示 523% | 誤套百分比格式；`pct_change` 已 ×100，改「數字 + 後綴 %」 |
 | 股號變成加總的數字 | `code` 被當度量；右鍵 → Convert to Dimension |
 | 每次點都很慢/計費 | 用了 Live；切成 **Extract** |
