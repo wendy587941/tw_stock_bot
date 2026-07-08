@@ -1,0 +1,11 @@
+# 地端 LLM 台股 QA（Week 13）— 本機執行，不部署上雲
+# Python 3.11（本機已裝）。安裝：pip install -r local_llm/requirements.txt
+# 版本先不鎖，跑通後再 pip freeze 產生 lock（避免現在鎖到不相容）。
+
+fastapi            # LINE webhook 服務
+uvicorn[standard]  # ASGI server
+requests           # 呼叫 Ollama HTTP API（也可用 stdlib urllib）
+chromadb           # 向量庫（RAG，本機 persistent）
+duckdb             # 查本機 parquet 快照（Tool-use 資料層）
+boto3              # 從 S3 marts 下載快照（唯一連雲時刻）
+pyarrow            # parquet 讀寫（DuckDB / 快照）
