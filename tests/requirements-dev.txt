@@ -1,0 +1,5 @@
+# Test-only dependencies. The Lambda handlers themselves need only boto3
+# (provided by the AWS base image at runtime); pandas is intentionally NOT
+# here — the worker function's pandas paths are not unit-tested.
+pytest>=8.0
+boto3>=1.34
