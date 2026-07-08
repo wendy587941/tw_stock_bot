@@ -105,4 +105,27 @@ If Bedrock is throttled or access is revoked, `analyzer` catches the failure, lo
 
 ---
 
+## 7. Incident log
+
+### 2026-07-08 — dbt build fails: `work_group` kwarg (dependency drift)
+**Symptom.** The scheduled dbt workflow went red for the first time (green the whole prior week). Every staging model (`stg_ohlcv` / `stg_signals` / `stg_yield`) died with:
+```
+Runtime Error in model stg_ohlcv (models/staging/stg_ohlcv.sql)
+  BaseCursor._execute() got an unexpected keyword argument 'work_group'
+```
+All downstream models/tests were then SKIPped → `PASS=0 ERROR=3 SKIP=20`.
+
+**Root cause.** Not data, not our code (last commit was docs-only). The CI install line was unpinned, so each run resolved the newest PyPI versions. `pyathena` published **3.35.0** between the 07-07 and 07-08 runs, which removed the `work_group` argument that `dbt-athena==1.10.2` still passes to the cursor.
+
+| Run | pyathena | Result |
+|---|---|---|
+| 07-07 | 3.34.0 | ✅ |
+| 07-08 | 3.35.0 | ❌ |
+
+**Fix.** Pin the transitive dependency in `.github/workflows/dbt.yml`: `pyathena>=3.34,<3.35`. Re-run the workflow (**Actions → dbt → Run workflow**) to confirm green.
+
+**Lesson / prevention.** A build with unpinned transitive deps is not reproducible — an upstream release can break a pipeline whose own code never changed. When `dbt-athena` ships a release compatible with pyathena 3.35, bump both together and widen the pin.
+
+---
+
 *Keep this file honest: when you hit an incident not covered here, add the symptom + fix.*
