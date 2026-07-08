@@ -1,267 +1,197 @@
-# 台股 AI 投資預警系統 (Taiwan Stock AI Alert System)
+# Taiwan Stock AI Alert System (台股 AI 投資預警系統)
 
-> 企業級 Side Project，從 AWS Serverless 架構打通「資料採集 → AI 分析 → LINE 推播」全自動流程。
-> 目標：作為 **Cloud Solutions Architect** 與 **Senior Data Engineer** 求職作品集。
+> A production-grade, fully **serverless** AWS side project that runs an end-to-end pipeline every trading day: **market data ingestion → AI-grounded analysis → LINE push notification**, plus an interactive LINE bot and a decoupled BI/analytics layer.
+>
+> Built as a portfolio piece for **Cloud Solutions Architect** / **Senior Data Engineer** roles. Design north star: **low TCO (all serverless, on-demand) + high automation (IaC + CI/CD, zero standing servers)**.
 
-[![Status](https://img.shields.io/badge/status-planning-yellow)]()
+[![Status](https://img.shields.io/badge/status-operational-brightgreen)]()
 [![Architecture](https://img.shields.io/badge/arch-AWS%20Serverless-orange)]()
 [![IaC](https://img.shields.io/badge/IaC-Terraform-purple)]()
-[![AI](https://img.shields.io/badge/AI-Bedrock%20Claude%204.5-ec4899)]()
+[![CI](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions%20(OIDC)-2088FF)]()
+[![AI](https://img.shields.io/badge/AI-Bedrock%20Claude%20Haiku%204.5-ec4899)]()
+[![Cost](https://img.shields.io/badge/run%20cost-%3C%20US%2410%2Fmo-blue)]()
 
 ---
 
-## 📌 專案現況
+## What it does
 
-**目前階段**：規劃定稿（**v3.0**），尚未開始程式碼實作。
+Every weekday (Mon–Fri, Taipei time) the system runs itself, with **no human in the loop and no always-on compute**:
 
-**最新規劃書**：[`docs/planning/台股機器人規劃書_v3.html`](docs/planning/台股機器人規劃書_v3.html)（含 Medallion + dbt + Power BI）
+| Time (Taipei) | Component | Action |
+|---|---|---|
+| 15:30 | `dispatcher` | Pull the full TWSE market snapshot, fan each stock out to SQS |
+| 15:30+ | `worker` × N | Per-stock ETL → Bronze (raw JSON) + Silver (Parquet) + DynamoDB hot store |
+| 16:00 | `analyzer` | Compute deterministic signals in Python, then have Bedrock **rewrite the numbers** into a Traditional-Chinese market summary |
+| 16:30 | `notifier` | Push the daily summary to LINE |
+| 17:00 | `dividend_ingest` | Ingest dividend-yield & cash-dividend data (decoupled domain) |
+| 17:30 | GitHub Actions `dbt build` | Refresh the Athena/dbt Gold marts for BI |
 
-**歷史版本**：[`v2`](docs/planning/台股機器人規劃書_v2.html)（不含分析層）
-
----
-
-## 🏗️ 核心架構（v3 雙軌）
-
-### Hot Path（即時推播 + 查詢）
-
-```
-EventBridge (15:30) → Dispatcher → SQS → Worker × N
-                                              ↓
-                  Bronze (raw JSON)  Silver (Parquet)  DynamoDB
-                                                          ↓
-                                       Analyzer → Bedrock (Claude 4.5)
-                                                          ↓
-                                                    SNS → LINE Push
-
-使用者查詢：LINE → API Gateway (HMAC) → Query Lambda → DynamoDB → LINE Reply
-```
-
-### Warm Path（分析 + BI）⭐ v3 新增 — ✅ Week 11 已實作
-
-```
-Silver: curated/*.parquet（OHLCV）+ curated/signals|yield/*.json（NDJSON）
-            ↓  Glue Catalog 外部表（partition projection，免 Crawler）
-         Athena（Serverless SQL，workgroup 成本護欄）
-            ↓  dbt-athena：staging(view) → intermediate(ephemeral) → marts(table)
-         Gold marts（fct_daily_ohlcv / mart_market_breadth / mart_top_movers / fct_signals / fct_yield）
-            ↓  (ODBC, Extract)
-         Tableau Dashboard（市場總覽 / 個股走勢 / 訊號與殖利率）
-
-排程：GitHub Actions `dbt.yml` 每日 17:30 台北 `dbt build`（零 AWS 常駐運算）
-```
-
-> 詳見 [`bi/README.md`](bi/README.md)（連線資訊 + 儀表板規格）與 [`docs/planning/week11_bi_dashboard_規劃書.md`](docs/planning/week11_bi_dashboard_規劃書.md)。
+On top of the scheduled pipeline, users **chat with the bot on LINE** to query on demand: `今日` (today's market summary), `訊號` (gainers/losers), `殖利率` (yield ranking), `配息 <code>` (a stock's dividend), and `月配/季配/半年配/年配` (stocks by payout frequency).
 
 ---
 
-## 🛠️ 技術棧
+## Architecture
 
-| 層次 | 技術 |
-|---|---|
-| **IaC** | Terraform |
-| **CI/CD** | GitHub Actions (OIDC) |
-| **運算** | AWS Lambda (Docker, ARM Graviton2) |
-| **佇列** | Amazon SQS + DLQ |
-| **儲存（Hot）** | DynamoDB (GSI) |
-| **儲存（Warm/Cold）** | S3 Parquet（Bronze/Silver/Gold 三層）|
-| **分析引擎** ⭐ | **Amazon Athena**（SQL on S3, Serverless）|
-| **Metadata** ⭐ | **AWS Glue Catalog** |
-| **轉換層** ⭐ | **dbt**（Silver → Gold marts）|
-| **視覺化** ⭐ | **Power BI / Tableau Public**（ODBC 連 Athena）|
-| **AI** | Amazon Bedrock + Claude 4.5 Haiku |
-| **密鑰** | AWS Secrets Manager |
-| **API** | API Gateway (HTTPS + HMAC) |
-| **觸發** | Amazon EventBridge（雙排程：ETL 15:30 + dbt 16:00）|
-| **監控** | CloudWatch + X-Ray + SNS |
-| **介面** | LINE Messaging API (Push + Webhook) |
+### Hot path — daily push + interactive query
 
-**預估月成本**：約 USD $55（v3 加分析層僅多 $0.45）
+```mermaid
+flowchart TB
+    EB1["EventBridge · 15:30"] --> DISP["dispatcher"]
+    DISP --> SQS["SQS + DLQ"]
+    SQS --> WRK["worker × N"]
+    WRK --> BRONZE["S3 Bronze<br/>raw JSON"]
+    WRK --> SILVER["S3 Silver<br/>Parquet"]
+    WRK --> DDB[("DynamoDB<br/>hot store &lt;10ms")]
+
+    EB2["EventBridge · 16:00"] --> ANA["analyzer"]
+    DDB -->|"today + prev day"| ANA
+    ANA -->|"facts only — grounding"| BR["Amazon Bedrock<br/>Claude Haiku 4.5"]
+    BR -->|"rewritten prose"| ANA
+    ANA -->|"SUMMARY item"| DDB
+    ANA --> GOLD["S3 Gold marts"]
+
+    EB3["EventBridge · 16:30"] --> NOT["notifier"]
+    DDB --> NOT
+    NOT --> LINEOUT["LINE push"]
+
+    USER(["User on LINE"]) --> APIGW["API Gateway<br/>HTTP API · HMAC verify"]
+    APIGW --> WH["webhook"]
+    DDB --> WH
+    WH -->|"Flex reply"| USER
+```
+
+> **Grounding:** the LLM is handed only the numbers `analyzer` already computed in Python (breadth, top gainers/losers/volume). It rewords — it never sources or invents figures. If Bedrock is unavailable, a deterministic template summary is written instead so the pipeline never breaks.
+
+### Warm path — decoupled BI / analytics (Week 11)
+
+```mermaid
+flowchart LR
+    SILVER["S3 Silver<br/>Parquet + NDJSON"] --> GLUE["Glue Catalog<br/>partition projection<br/>(no Crawler)"]
+    GLUE --> ATH["Amazon Athena<br/>serverless SQL<br/>+ workgroup scan cap"]
+    ATH --> DBT["dbt-athena<br/>staging → intermediate → marts"]
+    DBT --> MARTS["Gold marts × 5<br/>ohlcv · breadth · movers<br/>signals · yield"]
+    MARTS --> TAB["Tableau · 3 dashboards<br/>Market Overview · Stock Detail<br/>Signals &amp; Yield"]
+    GHA["GitHub Actions<br/>daily 17:30 · dbt build"] -.->|"orchestrates"| DBT
+```
+
+The BI layer is **fully decoupled** from the online hot path (DynamoDB), so heavy analytical scans never touch the low-latency query surface. See [`bi/README.md`](bi/README.md) for connection details and dashboard specs.
 
 ---
 
-## 📁 專案結構詳解
+## Tech stack
 
-### 整體鳥瞰
+| Layer | Choice | Notes |
+|---|---|---|
+| **IaC** | Terraform | Remote state in S3 + DynamoDB lock; `modules/` + `environments/` split. See [ADR-001](docs/architecture/ADR-001-iac-terraform.md) |
+| **CI/CD** | GitHub Actions + **OIDC** | No long-lived AWS keys; workflows for Terraform, image build/push, and dbt |
+| **Compute** | AWS Lambda (Docker, **ARM Graviton2**) | 6 functions, one per responsibility |
+| **Queue** | Amazon SQS + DLQ | `ReportBatchItemFailures` → per-message retry, not per-batch |
+| **Hot store** | DynamoDB (GSI, TTL) | Sub-10ms point reads for the LINE bot |
+| **Data lake** | S3 — Bronze / Silver / Gold (medallion) | Raw JSON → Parquet → analytics marts |
+| **Analytics engine** | Amazon Athena | Serverless SQL over S3 |
+| **Metadata** | AWS Glue Catalog | Partition projection → **no Crawler cost** |
+| **Transform** | dbt-athena | staging → intermediate → marts + data tests |
+| **BI** | Tableau | ODBC → Athena, Extract-based |
+| **AI** | Amazon Bedrock — **Claude Haiku 4.5** | Cross-region inference profile (Tokyo); deterministic fallback if unavailable |
+| **Secrets** | AWS SSM Parameter Store / Secrets Manager | No plaintext tokens in env vars |
+| **API** | API Gateway (HTTP API) + HMAC | LINE webhook signature verification |
+| **Scheduling** | Amazon EventBridge Scheduler | Weekday cron per stage |
+| **Monitoring** | CloudWatch alarms + SNS email | Lambda errors + SQS DLQ depth |
+| **Interface** | LINE Messaging API | Push + interactive webhook (Flex messages) |
+
+---
+
+## Engineering decisions worth calling out
+
+- **Grounding against hallucination.** The LLM never sees raw market data. `analyzer` computes every number in deterministic Python (breadth, top movers, volume), and Bedrock is given *only those facts* to rewrite into fluent prose. `notifier` quotes the same facts verbatim — the model rewords, it never invents figures.
+- **Graceful degradation.** If Bedrock is unavailable, `analyzer` falls back to a deterministic template summary so the pipeline never breaks and `notifier` always has something to push.
+- **Decoupling & fault tolerance.** EventBridge → SQS → Lambda → DynamoDB Streams. SQS DLQ + partial-batch failure reporting isolate a single bad stock from the whole run. A non-trading-day guard stops weekends/holidays from writing stale data.
+- **Cost discipline (low TCO).** 100% serverless & on-demand. Glue partition projection avoids a Crawler; the Athena workgroup caps scan bytes; dbt runs on GitHub Actions minutes, not standing compute. Estimated run cost **< US$10/month** — see [`docs/COST_ANALYSIS.md`](docs/COST_ANALYSIS.md).
+- **Least privilege.** Each Lambda gets its own IAM role scoped to exactly the resources it touches; GitHub deploys via OIDC with no stored credentials.
+
+---
+
+## Repository layout
 
 ```
 tw_stock_bot/
-├── docs/                 文件區（給人看的）
-├── infra/                基礎設施區（Terraform）
-├── src/                  應用程式碼區（Lambda）
-├── dbt/                  ⭐ v3 新增：dbt 轉換層
-├── bi/                   ⭐ v3 新增：BI 報表檔（Power BI / Tableau）
-├── tests/                測試區
-├── scripts/              一次性腳本
-├── .github/workflows/    CI/CD 設定
-├── .gitignore
-└── README.md
+├── src/                 6 Lambda functions (one dir each; Docker + requirements per fn)
+│   ├── dispatcher/        EventBridge → fan out stock list to SQS
+│   ├── worker/            SQS → per-stock ETL → Bronze + Silver + DynamoDB
+│   ├── analyzer/          Compute signals → Bedrock summary → DynamoDB + S3 Gold
+│   ├── notifier/          DynamoDB summary → LINE push
+│   ├── webhook/           API Gateway → HMAC verify → DynamoDB → LINE Flex reply
+│   └── dividend_ingest/   Dividend-yield & cash-dividend domain (decoupled)
+├── infra/               Terraform
+│   ├── modules/           lambda · sqs · dynamodb · s3 · ecr · http-api ·
+│   │                      eventbridge-schedule · iam-github-oidc · monitoring · analytics
+│   └── environments/dev/  Composition + tfvars for the dev environment
+├── dbt/                 dbt-athena project (staging / intermediate / marts + tests)
+├── bi/                  Tableau workbooks + dashboard screenshots
+├── docs/                Architecture (ADR), planning specs, runbook, cost analysis
+├── scripts/             One-off operational scripts
+├── tests/               (roadmap) unit + integration tests
+└── .github/workflows/   terraform.yml · deploy-images.yml · dbt.yml
 ```
 
-> 本結構參考 **AWS 官方 Lambda 微服務專案** + **HashiCorp Terraform 最佳實務**，符合企業級工程師習慣。面試被問到「你的專案怎麼組織？」可以直接秀這個結構說：「我採用 modules + environments 分離 + Lambda per directory 的設計，每個元件職責單一。」
-
 ---
 
-### 🗂️ `docs/` — 文件區（給人看的）
+## Running it
 
-| 子資料夾 | 預留給什麼 |
-|---|---|
-| `docs/planning/` | **規劃書**。目前放 v2 HTML，未來如果做 v3、v4 都放這。也可以放 PRD（產品需求文件）。 |
-| `docs/architecture/` | **架構圖、ADR、Schema 定義**。例如：用 draw.io 畫的細部架構圖、Mermaid 原始碼、ADR（Architecture Decision Record，記錄「為什麼選 SQS 不選 Kinesis」這類重大決策的 trade-off）。 |
-| `docs/runbook/` | **維運手冊**。當系統壞了，oncall 工程師要看的故障排查指南。例如：「DLQ 訊息累積怎麼處理」「Bedrock API 429 怎麼擴容」。**這份文件是新加坡遠端職位面試的加分武器。** |
-
----
-
-### 🏗️ `infra/` — 基礎設施區（Terraform 程式碼）
-
-| 子資料夾 | 預留給什麼 |
-|---|---|
-| `infra/modules/` | **可重用的 Terraform 模組**。例如：`modules/lambda/`（封裝 Lambda + IAM + CloudWatch 一套）、`modules/sqs/`（SQS + DLQ 一套）、`modules/dynamodb/`（含 GSI 設計）。寫好一次，三個環境共用。 |
-| `infra/environments/` | **環境差異化配置**。未來會長出 `dev/`、`staging/`、`prod/` 三個資料夾，每個放自己的 `main.tf`、`variables.tf`、`terraform.tfvars`。同一份 module 代碼，三套不同的 instance 規格與成本配置。 |
-
-> 💡 **Why 分 modules + environments？** 這是 Terraform 最佳實務，避免「修一個地方影響三個環境」的風險。面試會被問到。
-
----
-
-### 💻 `src/` — 應用程式碼區（Lambda 函式）
-
-| 子資料夾 | 對應規劃書階段 | 預留給什麼 |
-|---|---|---|
-| `src/dispatcher/` | 階段二入口 | **派發 Lambda**：被 EventBridge 觸發，從 TWSE 取得當日股票清單，逐一塞訊息到 SQS。會有 `handler.py`、`Dockerfile`、`requirements.txt`。 |
-| `src/worker/` | 階段二處理 | **ETL Worker Lambda**：被 SQS 觸發，每則訊息處理一支股票（抓資料 → 算技術指標 → 寫 Bronze + Silver + DDB）。包含資料源 Strategy Pattern 實作。 |
-| `src/analyzer/` | 階段三 | **AI 分析 Lambda**：被 DynamoDB Stream 觸發，呼叫 Bedrock + Output Validator，把結果寫回 DDB 並發 SNS。 |
-| `src/query/` | 階段五 | **LINE Webhook Lambda**：被 API Gateway 觸發，做 HMAC 驗章、查 DDB、回覆 LINE Flex Message。 |
-
-> 💡 **Why 一個 Lambda 一個資料夾？** 因為每個 Lambda 會打包成獨立的 Docker image，各自的 `requirements.txt` 也可能不同（例如 query Lambda 不需要 pandas）。
-
----
-
-### 📊 `dbt/` — 資料轉換區 ⭐ v3 新增
-
-對應規劃書 **Stage 6 分析層**：用 SQL 把 Silver 層加工為 Gold marts。
-
-| 子資料夾 | 預留給什麼 |
-|---|---|
-| `dbt/models/staging/` | 對接 S3 Silver 的入口層（型別宣告、輕度清洗）|
-| `dbt/models/intermediate/` | 中介計算表（不對外暴露）|
-| `dbt/models/marts/` | **🥇 Gold Layer 最終產出**（fct_daily_signals、fct_backtest_returns、dim_stocks）|
-| `dbt/tests/` | 自訂資料品質測試（例如「RSI 必須 0-100」）|
-| `dbt/macros/` | 可重用 SQL 函式 |
-| `dbt/dbt_project.yml` | dbt 專案配置 |
-| `dbt/profiles.yml` | Athena 連線設定（Glue Database、Workgroup）|
-
-> 💡 **Why dbt？** Python 處理單筆資料效率高，但跨股票聚合、JOIN、回測勝率用 SQL 寫遠比 pandas 快又清楚。dbt 額外給你版本控制、文件、測試三大紅利。
-
----
-
-### 📈 `bi/` — BI 報表檔 ⭐ v3 新增
-
-對應規劃書 **Stage 6 BI 整合**：四個核心 Dashboard。
-
-| 子資料夾 | 預留給什麼 |
-|---|---|
-| `bi/powerbi/` | `.pbix` 檔（Power BI Desktop 編輯的報表）|
-| `bi/tableau/` | `.twb` / `.twbx` 檔（Tableau 報表）|
-
-> 💡 **Why git 要存這些檔？** 雖然 `.pbix` 是二進位檔，無法 diff，但仍要納入版控以便回溯、備份、與 README 連結展示。
-
----
-
-### 🧪 `tests/` — 測試區
-
-未來會分成：
-- `tests/unit/`：純函式單元測試（例如 RSI 計算邏輯、HMAC 驗章函式）
-- `tests/integration/`：整合測試（用 `moto` mock AWS 服務、用 `pytest-localstack` 跑真實 SQS/DDB）
-
-CI/CD pipeline 跑 `pytest tests/` 必須全綠才能 deploy。
-
----
-
-### 🔧 `scripts/` — 一次性腳本區
-
-放**不是常駐服務、但偶爾要跑的工具**。例如：
-
-| 腳本 | 用途 |
-|---|---|
-| `backfill_history.py` | 補抓歷史股價資料 |
-| `migrate_ddb_schema.py` | DynamoDB schema 變更搬遷 |
-| `cost_report.py` | 拉 AWS Cost Explorer 出本月帳單 |
-| `local_test_bedrock.py` | 本機測 Bedrock prompt 調整 |
-
-> 💡 **Why 跟 `src/` 分開？** `src/` 是會部署到 AWS 的程式碼，`scripts/` 是只在本機跑的工具。職責不同。
-
----
-
-### 🤖 `.github/workflows/` — CI/CD 設定區
-
-GitHub Actions 的 YAML 配置檔。未來會有：
-
-| 檔案 | 用途 |
-|---|---|
-| `ci.yml` | 每次 push 跑 lint + test |
-| `deploy-dev.yml` | merge to `develop` 自動部署 dev 環境 |
-| `deploy-prod.yml` | merge to `main` + 人工 approve 部署 prod |
-| `terraform-plan.yml` | PR 時自動跑 `terraform plan` 留 comment |
-
----
-
-### 📄 根目錄檔案
-
-| 檔案 | 用途 |
-|---|---|
-| `README.md` | 專案門面，給訪客 / 面試官 / 未來的自己看 |
-| `.gitignore` | 告訴 git 哪些檔案永遠不要 commit（特別是 `.tfstate`、`.env`、`*.zip`） |
-
----
-
-### 🚀 從哪裡開始動工？
-
-建議從**階段一 IaC** 的最小單位開始：先寫 `infra/modules/dynamodb/`（含 GSI 設計），這是最簡單的入門點，跑通後再依序展開其他 module。
-
----
-
-## 🚀 Quick Start（程式碼開發時補上）
+This is a personal cloud deployment rather than a local app, but the moving parts are reproducible:
 
 ```bash
-# 待規劃中，將於階段一 IaC 完成後補上
+# 1) Infrastructure (from infra/environments/dev)
+terraform init && terraform apply
+
+# 2) Build & push Lambda images (or let GitHub Actions deploy-images.yml do it on push)
+#    Images are ARM64 Docker, pushed to ECR, then Lambda points at the new digest.
+
+# 3) dbt analytics layer (Windows note: set PYTHONUTF8=1)
+cd dbt && dbt deps && dbt build
+
+# 4) Manual backfill / test any stage
+#    Invoke a Lambda with {"force": true} to bypass the trading-day guard,
+#    or {"trade_date": "YYYY-MM-DD"} to override the target date.
 ```
 
 ---
 
-## 🗺️ 路線圖
+## Roadmap
 
-### 第一波（2026 Q3）
-- [ ] 階段一：Terraform IaC 全資源
-- [ ] 階段二：ETL + 資料源 Strategy Pattern
-- [ ] 階段三：Bedrock + Output Validator
-- [ ] 階段四：CloudWatch 三層告警
-- [ ] 階段五：LINE Bot 雙向互動
-- [ ] RAG 新聞情緒分析（firecrawl 整合）
-- [ ] OpenMetadata 治理整合
-- [x] dbt + Athena 分析層（Week 11：partition projection 外部表 + dbt marts + Tableau）
+**Done**
+- [x] Terraform IaC across all resources (modules + dev environment)
+- [x] ETL pipeline: dispatcher → SQS → worker (Bronze/Silver/DynamoDB)
+- [x] Bedrock-grounded daily analysis + deterministic fallback
+- [x] LINE daily push (`notifier`) + interactive bot (`webhook`)
+- [x] Dividend-yield & cash-dividend domain (`dividend_ingest`)
+- [x] CloudWatch alarms + SNS (Lambda errors, DLQ depth)
+- [x] BI/analytics layer: Athena + Glue partition projection + dbt marts + Tableau (Week 11)
 
-### 第二波（2026 Q4 - 2027 Q1）
-- [ ] Multi-Agent 協作架構
-- [ ] Streamlit / Next.js Dashboard
-- [ ] 英文文件三件套（README / RUNBOOK / COST_ANALYSIS）
+**Next**
+- [ ] Unit + integration tests (`moto` for AWS mocks) wired into CI
+- [ ] RAG news-sentiment enrichment (firecrawl)
+- [ ] `staging` / `prod` Terraform environments
+- [ ] On-prem GenAI Q&A demo (local LLM over the same marts)
 
-### 第三波（2027+）
-- [ ] ML 評分層替代規則引擎
-- [ ] 跨資產延伸（美股 / 加密貨幣）
-- [ ] 多區域災難復原
-
----
-
-## 📚 設計原則
-
-1. **低 TCO**：純 Serverless + On-Demand 計費，月成本控制在 $60 以內
-2. **解耦設計**：EventBridge → SQS → Lambda → DDB Streams → Lambda
-3. **容錯機制**：SQS DLQ + 資料源 Strategy Pattern + LLM Output Validation
-4. **最小權限**：每個 Lambda 獨立 IAM Role
-5. **密鑰管理**：Secrets Manager（杜絕環境變數明文 Token）
-6. **合約導向**：階段間 Pydantic Schema 明確定義
+**Later**
+- [ ] ML scoring layer to replace rule-based signals
+- [ ] Cross-asset extension (US equities / crypto)
+- [ ] Multi-region DR
 
 ---
 
-## 📄 授權
+## Design principles
+
+1. **Low TCO** — pure serverless + on-demand billing; run cost kept under US$10/month.
+2. **Decoupling** — EventBridge → SQS → Lambda → DynamoDB Streams → Lambda.
+3. **Fault tolerance** — SQS DLQ, partial-batch failure reporting, data-source strategy, LLM output grounding.
+4. **Least privilege** — one IAM role per Lambda; OIDC-based deploys.
+5. **Secret hygiene** — SSM / Secrets Manager, never plaintext tokens.
+6. **Contract-driven** — explicit schemas between pipeline stages.
+
+---
+
+## License
 
 Private project. All rights reserved.
