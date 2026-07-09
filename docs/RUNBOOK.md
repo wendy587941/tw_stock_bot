@@ -126,6 +126,35 @@ All downstream models/tests were then SKIPped → `PASS=0 ERROR=3 SKIP=20`.
 
 **Lesson / prevention.** A build with unpinned transitive deps is not reproducible — an upstream release can break a pipeline whose own code never changed. When `dbt-athena` ships a release compatible with pyathena 3.35, bump both together and widen the pin.
 
+### 2026-07-09 — dbt build "fails" without running: no hosted runner (platform outage)
+**Symptom.** The scheduled dbt workflow went red again, one day after the fix above. Tempting to assume the pin had failed — it had not. The run never executed a single step:
+
+| Signal | Attempt 1 (red) | Attempt 2 (green) |
+|---|---|---|
+| `runner_name` | `""` | `GitHub Actions 1000000064` |
+| `steps` (jobs API) | `[]` | 9 steps, all success |
+| Downloaded log zip | 22 bytes (empty) | 638 lines |
+| Job annotation | `The job was not acquired by Runner of type hosted even after multiple attempts` | — |
+
+The job sat queued for 15 minutes (12:19:36Z → 12:34:39Z) and was then cancelled. Note the schedule itself was already ~3 h late: cron is `30 9 * * 1-5`, but the run was only created at 12:19Z.
+
+**Root cause.** Neither our code, our data, nor AWS. GitHub had an ongoing **critical** incident, *"Delays starting Actions runs"* (opened 04:34Z, affecting Actions and Pages), so no hosted runner was ever assigned.
+
+**Fix.** Nothing to change. Wait for the incident to reach `resolved` on the status page, then re-run the workflow — it went green on the first attempt (`PASS=23 WARN=0 ERROR=0`, identical to the previous good run).
+
+```bash
+# Is this a platform problem or ours?
+curl -s https://www.githubstatus.com/api/v2/incidents.json | jq '.incidents[0] | {name, status, created_at}'
+
+# Did the job actually run? Empty steps + empty runner_name == it never started.
+gh api repos/:owner/:repo/actions/runs/<run_id>/jobs --jq '.jobs[] | {conclusion, runner_name, steps: (.steps | length)}'
+gh api repos/:owner/:repo/check-runs/<job_id>/annotations --jq '.[].message'
+```
+
+**Lesson / prevention.** Triage the *ownership* of a failure before touching code — two consecutive red dbt runs had entirely unrelated causes, and the second one required no change at all. The tell: a real failure leaves step logs; an infrastructure failure leaves an empty log and a job annotation.
+
+Blast radius is limited by design: this workflow only rebuilds the Gold marts, so a missed run means Tableau shows yesterday's numbers. The daily ETL → analyzer → notifier → dividend_ingest chain runs on **EventBridge in AWS** and is unaffected by GitHub outages. There is no automatic retry — a skipped day is either re-run by hand or picked up by the next day's cron. That is an accepted trade-off for a once-daily BI refresh, not an oversight.
+
 ---
 
 *Keep this file honest: when you hit an incident not covered here, add the symptom + fix.*
