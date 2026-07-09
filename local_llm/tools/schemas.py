@@ -167,6 +167,9 @@ DISPATCH = {
     "get_dividend": snapshot.get_dividend,
 }
 
+# 全部工具皆屬「盤後數據」查詢（回覆需附資料日期）；靜態知識走確定性 RAG 注入，不當工具。
+DATA_TOOLS = frozenset(DISPATCH)
+
 
 def execute_tool(name: str, args: dict):
     """執行模型指定的工具呼叫；未知工具或多餘參數皆安全處理。"""
