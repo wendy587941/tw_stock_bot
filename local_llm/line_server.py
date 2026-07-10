@@ -66,7 +66,8 @@ def _post(url: str, body: dict) -> None:
             headers={"Authorization": f"Bearer {config.LINE_CHANNEL_TOKEN}"},
             timeout=_HTTP_TIMEOUT,
         )
-        if r.status_code != 200:
+        # reply/push 回 200，loading animation 回 202 Accepted → 一律以 2xx 為成功。
+        if not 200 <= r.status_code < 300:
             log.warning("line_api_failed %s: HTTP %s %s", url, r.status_code, r.text)
     except requests.RequestException as e:
         log.warning("line_api_error %s: %s", url, e)
