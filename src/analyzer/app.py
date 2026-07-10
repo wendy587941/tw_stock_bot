@@ -50,8 +50,16 @@ def _is_trading_day(d: dt.date) -> bool:
     return d.isoformat() not in MARKET_HOLIDAYS
 
 
+# 往前找前一交易日時最多回溯幾個日曆日（連假 + 臨時休市的合理上限）。
+MAX_LOOKBACK_DAYS = 10
+
+
 def _prev_trading_day(d: dt.date) -> dt.date:
-    """往前回推最近一個交易日（跳過週末與假日）。"""
+    """往前回推最近一個交易日（跳過週末與已知假日）。
+
+    僅為日曆推算：颱風假等臨時休市不在 MARKET_HOLIDAYS 裡，故此結果不保證有資料。
+    要拿前一日收盤請用 _prev_day_with_data。
+    """
     p = d - dt.timedelta(days=1)
     while not _is_trading_day(p):
         p -= dt.timedelta(days=1)
@@ -73,6 +81,24 @@ def _query_day(trade_date: str) -> list[dict]:
         if not lek:
             return items
         kwargs["ExclusiveStartKey"] = lek
+
+
+def _prev_day_with_data(d: dt.date) -> tuple[str | None, list[dict]]:
+    """往前找最近一個「實際有資料」的交易日，回 (日期 ISO, 全市場個股)。
+
+    不可只靠日曆回推：颱風假等臨時休市不會出現在 MARKET_HOLIDAYS，日曆會指到一個
+    完全沒有資料的日子，於是 prev_close 全空、每檔 pct_change 都算不出來，
+    漲跌家數與漲跌幅榜整個崩掉。改以「查得到資料」為準。
+    回溯用盡仍無資料 → (None, [])，交由呼叫端決定如何降級。
+    """
+    p = d - dt.timedelta(days=1)
+    for _ in range(MAX_LOOKBACK_DAYS):
+        if _is_trading_day(p):
+            items = _query_day(p.isoformat())
+            if items:
+                return p.isoformat(), items
+        p -= dt.timedelta(days=1)
+    return None, []
 
 
 def _f(v):
@@ -310,8 +336,9 @@ def handler(event, context):
         print(f"abort: no data in hot store for {trade_date}")
         return {"trade_date": trade_date, "summarized": False, "skipped": "empty_source"}
 
-    prev_date = _prev_trading_day(d).isoformat()
-    prev = _query_day(prev_date)
+    prev_date, prev = _prev_day_with_data(d)
+    if prev_date is None:
+        print(f"WARN no prior day with data within {MAX_LOOKBACK_DAYS}d of {trade_date}")
     facts = _build_facts(today, prev, trade_date)
 
     expires = int((now + dt.timedelta(days=TTL_DAYS)).timestamp())

@@ -35,6 +35,46 @@ class TestPrevTradingDay:
         assert az._prev_trading_day(dt.date(2026, 6, 18)) == dt.date(2026, 6, 17)
 
 
+class TestPrevDayWithData:
+    """The previous close must come from a day that *has data*, not from the
+    calendar. 2026-07-10 was a Friday closed for a typhoon — it can never be in
+    the hand-maintained holiday list, so the calendar happily points at it."""
+
+    def _stub(self, monkeypatch, days_with_data):
+        monkeypatch.setattr(
+            az, "_query_day", lambda d: [{"PK": "STOCK#2330"}] if d in days_with_data else []
+        )
+
+    def test_skips_typhoon_day_with_no_data(self, monkeypatch):
+        self._stub(monkeypatch, {"2026-07-09"})
+        # Mon 2026-07-13: calendar prev is Fri 07-10 (typhoon, no data) → must fall to 07-09
+        prev_date, items = az._prev_day_with_data(dt.date(2026, 7, 13))
+        assert prev_date == "2026-07-09"
+        assert items
+
+    def test_normal_case_takes_immediate_previous(self, monkeypatch):
+        self._stub(monkeypatch, {"2026-07-08", "2026-07-07"})
+        prev_date, _ = az._prev_day_with_data(dt.date(2026, 7, 9))
+        assert prev_date == "2026-07-08"
+
+    def test_crosses_weekend_without_querying_it(self, monkeypatch):
+        asked = []
+
+        def _q(d):
+            asked.append(d)
+            return [{"PK": "STOCK#2330"}] if d == "2026-07-09" else []
+
+        monkeypatch.setattr(az, "_query_day", _q)
+        prev_date, _ = az._prev_day_with_data(dt.date(2026, 7, 13))  # Monday
+        assert prev_date == "2026-07-09"
+        # Sat 07-11 / Sun 07-12 are filtered by the calendar, never queried.
+        assert "2026-07-11" not in asked and "2026-07-12" not in asked
+
+    def test_gives_up_after_lookback_window(self, monkeypatch):
+        self._stub(monkeypatch, set())
+        assert az._prev_day_with_data(dt.date(2026, 7, 13)) == (None, [])
+
+
 # ── 小工具 ────────────────────────────────────────────────────────────────────
 def test_code_of():
     assert az._code_of({"PK": "STOCK#2330"}) == "2330"
