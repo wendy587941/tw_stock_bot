@@ -159,3 +159,6 @@ dbt/.user.yml
 
 # Tableau extract data files (regenerable, may embed local paths)
 bi/tableau/*.hyper
+
+# 地端 LLM 評測產出（每次跑帶時間戳，可重生；比較表已寫進 README）
+local_llm/eval/results/

@@ -23,7 +23,9 @@
   離線 smoke test 18 項全綠（驗章／路由／非同步交棒／忙碌降級／例外釋鎖／長答案截斷）；
   手機實測三路徑（📚 RAG／📅 資料工具／ℹ️ 界外題）皆正確回覆，生產 channel A 未受影響。
   對外端點＝Cloudflare Quick Tunnel（`cloudflared tunnel --url http://localhost:8000`）。
-- ⬜ 階段 6（選）：Breeze2 對照 + benchmark
+- ✅ **階段 6（模型選型 benchmark）已完成** — 2026-07-11
+  `eval/questions.py`（15 題涵蓋 6 工具／3 知識文件／3 界外題）+ `eval/benchmark.py`（同一生產管線只換模型）。
+  Qwen2.5-3B vs Breeze2-3B 實測對照與選型結論見下方〈階段 6〉節。
 - ✅ **階段 7（文件 + demo 腳本）已完成** — 2026-07-10
   一鍵啟動、3 分鐘 demo 腳本、架構圖、雲／地 TCO 對照、面試 talking points（見下方各節）。
 
@@ -58,7 +60,7 @@ local_llm/
 ├─ tools/               # snapshot.py / schemas.py（階段 1、3）
 ├─ qa/                  # router.py / prompts.py / llm.py（階段 3、4）
 ├─ line_server.py       # FastAPI webhook（階段 5）
-└─ eval/                # benchmark.py（階段 6）
+└─ eval/                # questions.py + benchmark.py（階段 6 模型選型）；results/ gitignore
 ```
 
 ## 階段 5：LINE 整合設定步驟
@@ -258,10 +260,58 @@ cloudflared tunnel --url http://localhost:8000
 
 ---
 
-## 下一步（階段 6，選配：Breeze2 對照 benchmark）
+## 階段 6：模型選型 benchmark（Qwen2.5-3B vs Breeze2-3B）
 
-1. `ollama create` 匯入 Breeze2-3B。
-2. `eval/benchmark.py`：同一批問題跑 Qwen vs Breeze2，記錄繁中品質（人工評分）、tool-use 成功率、延遲（tok/s）。
-3. 產出比較表寫進本節，當作「我做過模型選型，不是隨手抓一個」的證據。
+「我做過模型選型，不是隨手抓一個 3B」的證據。方法：**同一條生產管線（`qa.router`）只換模型**——一樣的檢索、一樣的工具 schema、一樣的 prompt，確保是蘋果對蘋果。
+
+- 題組：`eval/questions.py`，15 題，涵蓋 6 個資料工具、3 篇知識文件、3 類界外題。
+- 跑法：`python -m local_llm.eval.benchmark qwen2.5:3b breeze2:3b`（Windows 需 `PYTHONUTF8=1`）。
+- Breeze2 取得：`ollama pull hf.co/mradermacher/Llama-Breeze2-3B-Instruct-Text-GGUF:Q4_K_M` → `ollama cp … breeze2:3b`。
+
+### 實測結果（2026-07-11，RTX 3050 Ti 4GB）
+
+| 指標 Metric | qwen2.5:3b | breeze2:3b |
+|---|---|---|
+| 工具**執行**成功 Tool-use (native) | **8/8 (100%)** | 6/8 (75%) |
+| 工具**選對**意圖 Tool intent (incl. text) | 8/8 (100%) | 8/8 (100%) |
+| 知識庫命中 RAG grounding | **4/4 (100%)** | 3/4 (75%)ᵃ |
+| 誠實降級 Honest downgrade | 3/3 (100%) | 3/3 (100%) |
+| 整體正確 Overall | **15/15 (100%)** | 12/15 (80%) |
+| 平均延遲 Mean latency | **10.4s** | 45.7s |
+| 最慢單題 Max latency | **17.1s** | 311.4sᵃ |
+| 原始生成速度 Raw tok/s | **54.7** | 21.2 |
+
+> ᵃ Breeze2 的 RAG 只掉 1 題，且**不是檢索失敗**——那題（除權息）在 4GB VRAM 下 Breeze2(2.24GB)+bge-m3(1.16GB) 互搶顯存導致模型換入換出，生成卡到 **300s request timeout**。檢索本身與模型無關（同一組 bge-m3 向量），故此為**部署層 VRAM 瓶頸**，非模型能力問題。
+
+### 兩個關鍵發現（面試可講）
+
+**1. 「選對工具」≠「呼叫得動工具」——能力 vs 執行的落差。**
+Breeze2 的 *tool intent* 是 8/8：每一題它都知道該叫哪個工具。但 native tool-use 只有 6/8——在兩題個股查詢上，它把 function call **印成純文字**（甚至 JSON 引號不合法：`{"name":"get_stock_ohlcv", "parameters":{"code': '2330'…}`），沒走 Ollama 原生 function-calling 通道，於是生產 router 收不到 `tool_calls`、工具沒被執行。這是 **GGUF chat template 對工具支援不完整**的整合成本，不是模型不會。Qwen2.5 的原生 function-calling 在 Ollama 開箱即用（8/8），對這個「模型自己決定查哪張表」的架構是決定性優勢。
+
+**2. 繁中純度 vs 速度／顯存——各有所長。**
+- **繁中純度**：本輪 Breeze2 產出 0/15 題含簡體字，Qwen 有 1/15（`现`）；另一次重跑 Qwen 的個股走勢答案更明顯簡繁混雜（「这些数据」「收盘价」）。MediaTek 在地化的 Breeze2 這點確實較穩。
+- **速度**：Qwen 約 **2.6×** 快（54.7 vs 21.2 tok/s，平均延遲 10s vs 46s）。對 LINE 即時回覆這是硬需求。
+- **顯存**：Qwen 在 4GB 與 bge-m3 共存無虞；Breeze2 Q4 較吃緊，會 thrash。
+
+### 自動分數 vs 人工品質：aggregate 會騙人
+
+這是留一張人工評分表逐題讀完的價值。**可自動化的指標把 Breeze2 打成 12/15，但親眼看 output，實際堪用度遠低於這個數字**——結構化評分量得出「有沒有呼叫工具、有沒有命中知識庫」，量不出下面這些：
+
+- **呼叫了工具卻不用結果（最嚴重）**：d4 漲幅榜、d6 強勢股，Breeze2 的 native tool-use 判 PASS（工具確實叫到），最終答案卻是「查無資料」；d5 跌幅榜更直接**捏造** `2023-12-31` 與一排佔位代碼 `XXXX / YYYY / ZZZT`。工具回了資料，模型沒 grounding 進答案。Qwen 這三題都把真實股名／代碼／漲跌幅完整講出。→ aggregate 的「tool-use 6/8」把這層品質崩壞整個藏住。
+- **數字符號錯**：d3 大盤，下跌 784 > 上漲 479，市場廣度應為負，Breeze2 卻說「漲幅比例約 35.19%」；Qwen 給對「-35.20%」。
+- **界外題切換語言**：o1 比特幣、o2 美股，Breeze2 改用**英文**作答——honest-downgrade 自動判 PASS（沒亂叫工具、沒假出處），但在地化模型該拒答時破功切英文，人工要扣分。
+- **破規則＋捏造**：o3「推薦一定賺錢的股票」，Breeze2 捏造日期、把 function call 印成參考文字、推薦台積電／聯發科並說「很可能會繼續賺錢」——這是 oob 題裡最不該出現的虛構投資建議；Qwen 老實婉拒＋免責。
+
+**教訓（面試講法）**：我沒有只看 aggregate。數字會騙人——它量不出「呼叫了卻沒把結果講出來」「符號錯」「切英文」「捏造建議」。所以逐題讀 output，才是負責任的模型評估。這反而讓「留 Qwen」的結論更站得住腳。
+
+### 選型結論
+
+**這個 demo 維持 Qwen2.5-3B 當主力。** 理由依權重：① 原生 function-calling 開箱即用（架構核心是 tool-use，這條不能妥協）；② 2.6× 的速度與穩定的延遲直接決定 LINE 體驗；③ 4GB VRAM 下與 embedding 共存不 thrash。
+
+**什麼情況我會改選 Breeze2？** 若部署目標是**正規 GPU 伺服器**（非 4GB 筆電）、且**繁中語感**比延遲更重要，Breeze2（尤其 8B）是更強的答題引擎——它的工具「意圖」已 8/8，只要補一個「把文字化 function call 解析回結構化呼叫」的 shim，或換支持工具模板更完整的 GGUF，落差就補平了。**取捨清楚、可量化，這正是選型的重點。**
+
+> 原始逐題結果與人工評分表（含每題各模型完整答案）由 `benchmark.py` 寫到 `eval/results/`（已 gitignore，可重生）。
+
+---
 
 > 每次 demo 前先跑 `python scripts/sync_snapshot.py` 更新快照（需本機 AWS 憑證；跑完即可離線）。
