@@ -120,4 +120,4 @@ Write-Host "    $WebhookUrl" -ForegroundColor Green
 Write-Host "   （只設 demo channel B，勿動生產 channel A）" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "▶️  啟動 ngrok（Ctrl+C 結束對外；uvicorn 視窗需另手動關閉）…" -ForegroundColor Cyan
-& ngrok http "--url=$Domain" $Port
+& ngrok http "--domain=$Domain" $Port   # --domain 相容舊版 agent；新版 --url 亦可（ngrok update）
