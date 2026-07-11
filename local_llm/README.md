@@ -91,13 +91,21 @@ uvicorn local_llm.line_server:app --port 8000  # Windows 需 PYTHONUTF8=1
 要「重開不換網址、免每次回 LINE console 改 Webhook URL」，關鍵是別用匿名臨時通道。兩種固定網址方案：
 
 **方案 A：ngrok 固定網域（推薦，免自有網域、免費）**
-ngrok 免費方案每帳號送 **1 個固定網域**（形如 `wendy-stock.ngrok-free.app`）。
+ngrok 免費帳號**自動配 1 個固定網域**，格式為 `xxxxx.ngrok-free.dev`（名字不可自訂，但永久固定；自選漂亮子網域需付費）。
+
+一次性設定：
 ```
-winget install ngrok.ngrok                 # 裝完重開 shell
-ngrok config add-authtoken <dashboard 的 token>
-# dashboard → Domains 建立免費固定網域，然後：
-ngrok http --url=wendy-stock.ngrok-free.app 8000
+# 1) 註冊 ngrok.com（免費），dashboard → Getting Started → Your Authtoken 取 token
+winget install ngrok.ngrok                      # 裝完重開 shell
+ngrok config add-authtoken <你的 token>          # 綁本機，只做一次
+# 2) dashboard → Domains 查你被配到的網域（空的話按 + New，免費帳號直接給你那個 .ngrok-free.dev）
+setx NGROK_DEMO_DOMAIN "xxxxx.ngrok-free.dev"    # 換成實際網域；設完重開 shell
 ```
+之後起 tunnel（或直接用下方一鍵腳本）：
+```
+ngrok http --url=xxxxx.ngrok-free.dev 8000
+```
+LINE console（demo channel B）Webhook URL 填 `https://xxxxx.ngrok-free.dev/callback`，一次即可、永不再改。
 > 一鍵版：`scripts\start_demo.ps1`（連 uvicorn 一起帶起，讀 `NGROK_DEMO_DOMAIN` 或 `-Domain`）。
 
 **方案 B：Cloudflare Named Tunnel（需自有網域，最穩／最專業）**
@@ -175,7 +183,7 @@ flowchart LR
 
 ```powershell
 # 先設一次固定網域（之後免帶），或用 -Domain 參數帶入
-setx NGROK_DEMO_DOMAIN "wendy-stock.ngrok-free.app"   # 設完重開 shell
+setx NGROK_DEMO_DOMAIN "xxxxx.ngrok-free.dev"   # 設完重開 shell
 
 # 每次 demo 前執行（Ctrl+C 收 tunnel；uvicorn 在另一視窗需手動關）
 powershell -ExecutionPolicy Bypass -File scripts\start_demo.ps1
@@ -200,7 +208,7 @@ $env:PYTHONUTF8 = "1"
 .venv\Scripts\uvicorn.exe local_llm.line_server:app --port 8000
 
 # 4. 另開視窗起 tunnel（固定網域），把網址填回 LINE console 的 Webhook URL
-ngrok http --url=wendy-stock.ngrok-free.app 8000
+ngrok http --url=xxxxx.ngrok-free.dev 8000
 ```
 </details>
 

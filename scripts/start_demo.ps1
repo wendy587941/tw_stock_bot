@@ -12,7 +12,7 @@
     只碰 demo channel B，完全不動生產 channel A（其 webhook 掛在 Lambda）。
 
 .PARAMETER Domain
-    你在 ngrok dashboard 建立的固定網域，例如 wendy-stock.ngrok-free.app。
+    你的 ngrok 固定網域（免費帳號自動配，格式 xxxxx.ngrok-free.dev）。
     省略時讀環境變數 NGROK_DEMO_DOMAIN（建議：setx NGROK_DEMO_DOMAIN "..."）。
 
 .PARAMETER Port
@@ -25,7 +25,7 @@
     跳過模型預熱。預熱可避免 demo 第一題吃到 GPU 冷載入而變慢。
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File scripts\start_demo.ps1 -Domain wendy-stock.ngrok-free.app
+    powershell -ExecutionPolicy Bypass -File scripts\start_demo.ps1 -Domain xxxxx.ngrok-free.dev
 
 .EXAMPLE
     # 已設好 NGROK_DEMO_DOMAIN，離線重跑（不更新快照）
@@ -54,8 +54,8 @@ function Fail($msg) { Write-Host "❌ $msg" -ForegroundColor Red; exit 1 }
 if (-not $Domain) {
     Fail @"
 沒有固定網域。請擇一：
-  1) 帶參數：  .\scripts\start_demo.ps1 -Domain 你的.ngrok-free.app
-  2) 設環境變數（一次即可，之後免帶）： setx NGROK_DEMO_DOMAIN "你的.ngrok-free.app"（設完重開 shell）
+  1) 帶參數：  .\scripts\start_demo.ps1 -Domain xxxxx.ngrok-free.dev
+  2) 設環境變數（一次即可，之後免帶）： setx NGROK_DEMO_DOMAIN "xxxxx.ngrok-free.dev"（設完重開 shell）
 在 ngrok dashboard → Domains 建立免費固定網域後取得。
 "@
 }
